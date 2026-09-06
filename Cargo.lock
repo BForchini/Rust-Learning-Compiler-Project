@@ -6,12 +6,16 @@ version = 4
 name = "compiler"
 version = "0.1.0"
 dependencies = [
+ "lexer",
  "parser",
 ]
 
 [[package]]
 name = "lexer"
 version = "0.1.0"
+dependencies = [
+ "syntax",
+]
 
 [[package]]
 name = "parser"
@@ -24,6 +28,3 @@ dependencies = [
 [[package]]
 name = "syntax"
 version = "0.1.0"
-dependencies = [
- "lexer",
-]
