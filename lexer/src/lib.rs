@@ -61,13 +61,11 @@ fn push_number(
 }
 
 #[cfg(test)]
-
 pub mod tests {
 
     use super::*;
     use syntax::{
-        CalculatorError::{self},
-        Token,
+        Token::{Number, Plus, Star},
     };
 
     #[test]
