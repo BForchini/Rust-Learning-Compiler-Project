@@ -30,7 +30,7 @@ fn prv_lexer(trimmed: &str) -> Result<Vec<Token>, CalculatorError> {
     }
 
     if !current_number.is_empty() {
-        let _ = push_number(&mut current_number, &mut tokens)?;
+        push_number(&mut current_number, &mut tokens)?;
     }
 
     Ok(tokens)
