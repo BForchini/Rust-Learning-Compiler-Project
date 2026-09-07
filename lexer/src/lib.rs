@@ -1,4 +1,7 @@
-use syntax::{CalculatorError::{self}, Token};
+use syntax::{
+    CalculatorError::{self},
+    Token,
+};
 
 pub fn pub_lex(input: &str) -> Result<Vec<Token>, CalculatorError> {
     let trimmed = input.trim();
@@ -14,11 +17,13 @@ fn prv_lexer(trimmed: &str) -> Result<Vec<Token>, CalculatorError> {
             current_number.push(c);
         } else if let Some(oper) = parse_operator(c) {
             if !current_number.is_empty() {
-                let value = current_number.parse::<f64>().map_err(|_| CalculatorError::ParseError)?;
+                let value = current_number
+                    .parse::<f64>()
+                    .map_err(|_| CalculatorError::ParseError)?;
                 tokens.push(Token::Number(value));
                 current_number = String::new();
                 tokens.push(oper);
-            } 
+            }
         } else if !c.is_whitespace() {
             return Err(CalculatorError::InputInvalid);
         }
@@ -29,11 +34,9 @@ fn prv_lexer(trimmed: &str) -> Result<Vec<Token>, CalculatorError> {
     }
 
     Ok(tokens)
-
 }
 
-
-fn parse_operator(c: char) -> Option<Token>{
+fn parse_operator(c: char) -> Option<Token> {
     match c {
         '+' => Some(Token::Plus),
         '-' => Some(Token::Minus),
@@ -43,13 +46,17 @@ fn parse_operator(c: char) -> Option<Token>{
     }
 }
 
-fn push_number(current_numbers: &mut String, tokens: &mut Vec<Token>) -> Result<(), CalculatorError>{
-
-    if !current_numbers.is_empty(){
-            let value = current_numbers.parse::<f64>().map_err(|_| CalculatorError::ParseError)?;
-            tokens.push(Token::Number(value));
-            current_numbers.clear();
-    } 
+fn push_number(
+    current_numbers: &mut String,
+    tokens: &mut Vec<Token>,
+) -> Result<(), CalculatorError> {
+    if !current_numbers.is_empty() {
+        let value = current_numbers
+            .parse::<f64>()
+            .map_err(|_| CalculatorError::ParseError)?;
+        tokens.push(Token::Number(value));
+        current_numbers.clear();
+    }
     Ok(())
 }
 
@@ -58,51 +65,55 @@ fn push_number(current_numbers: &mut String, tokens: &mut Vec<Token>) -> Result<
 pub mod tests {
 
     use super::*;
-    use syntax::{CalculatorError::{self}, Token::{Plus, Star, Number}};
+    use syntax::{
+        CalculatorError::{self},
+        Token,
+    };
 
+    #[test]
+    fn no_white_space() {
+        let result = pub_lex("3+5");
 
-        #[test]
-        fn no_white_space(){
-            let result = pub_lex("3+5");
+        assert!(result.is_ok());
 
-            assert!(result.is_ok());
+        let tokens = result.unwrap();
 
-            let tokens = result.unwrap();
+        assert_eq!(tokens, vec![Number(3.0), Plus, Number(5.0)]);
+    }
 
-            assert_eq!(tokens, vec![Number(3.0), Plus, Number(5.0)]);
-        }
+    #[test]
+    fn one_gap_whitespace() {
+        let result = pub_lex("3 + 5");
 
-        #[test]
-        fn one_gap_whitespace(){
-            let result = pub_lex("3 + 5");
-            
-            assert!(result.is_ok());
+        assert!(result.is_ok());
 
-            let tokens = result.unwrap();
+        let tokens = result.unwrap();
 
-            assert_eq!(tokens, vec![Number(3.0), Plus, Number(5.0)]);
-        }
+        assert_eq!(tokens, vec![Number(3.0), Plus, Number(5.0)]);
+    }
 
+    #[test]
+    fn multi_integer_star() {
+        let result = pub_lex("123 * 456");
 
-        #[test]
-        fn multi_integer_star(){
-            let result = pub_lex("123 * 456");
+        assert!(result.is_ok());
 
-            assert!(result.is_ok());
+        let tokens = result.unwrap();
 
-            let tokens = result.unwrap();
+        assert_eq!(tokens, vec![Number(123.0), Star, Number(456.0)]);
+    }
 
-            assert_eq!(tokens, vec![Number(123.0), Star, Number(456.0)]);
-        }
+    #[test]
+    fn multi_operator() {
+        let result = pub_lex("3 + 5 * 2");
 
-        #[test]
-        fn multi_operator(){
-            let result = pub_lex("3 + 5 * 2");
+        assert!(result.is_ok());
 
-            assert!(result.is_ok());
-            
-            let tokens = result.unwrap();
+        let tokens = result.unwrap();
 
-            assert_eq!(tokens, vec![Number(3.0), Plus, Number(5.0), Star, Number(2.0)]);
-        }
+        assert_eq!(
+            tokens,
+            vec![Number(3.0), Plus, Number(5.0), Star, Number(2.0)]
+        );
+    }
 }
