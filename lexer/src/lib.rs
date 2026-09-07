@@ -64,9 +64,7 @@ fn push_number(
 pub mod tests {
 
     use super::*;
-    use syntax::{
-        Token::{Number, Plus, Star},
-    };
+    use syntax::Token::{Number, Plus, Star};
 
     #[test]
     fn no_white_space() {
