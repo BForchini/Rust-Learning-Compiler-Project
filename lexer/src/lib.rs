@@ -46,7 +46,7 @@ fn parse_operator(c: char) -> Option<Token> {
     }
 }
 
-fn push_number(
+fn push_number( //Function is for the final term of the string.
     current_numbers: &mut String,
     tokens: &mut Vec<Token>,
 ) -> Result<(), CalculatorError> {
@@ -64,7 +64,7 @@ fn push_number(
 pub mod tests {
 
     use super::*;
-    use syntax::Token::{Number, Plus, Star};
+    use syntax::Token::{Minus, Number, Plus, Star};
 
     #[test]
     fn no_white_space() {
@@ -111,5 +111,16 @@ pub mod tests {
             tokens,
             vec![Number(3.0), Plus, Number(5.0), Star, Number(2.0)]
         );
+    }
+
+    #[test]
+    fn negative_num() {
+        let result = pub_lex("3 - 2");
+
+        assert!(result.is_ok());
+
+        let tokens = result.unwrap();
+
+        assert_eq!(tokens, vec![Number(3.0), Minus, Number(2.0)]);
     }
 }
