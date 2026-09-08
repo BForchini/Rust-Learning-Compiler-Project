@@ -20,7 +20,7 @@ pub enum Expr { // For the parser to recognise order of operations.
     Number(f64),
     Binary {
         left: Box<Expr>,
-        operator: Token,
+        operator: Operator,
         right: Box<Expr>,
     },
 }
