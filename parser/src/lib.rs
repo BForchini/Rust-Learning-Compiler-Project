@@ -37,8 +37,9 @@ impl Parser {
         let left = self.parse_factor()?;
         match &self.tokens[self.position] {
             Token::Star => {
-                self.position += 1;
-                Ok(Operator::Multiplication)
+                self.position += 2;
+                let right = self.parse_factor()?;
+                Ok(Expr::Binary { left: Box::new(left), operator: Operator::Addition, right: Box::new(right) })
             }
             _ => Err(ParseError),
         }
@@ -53,7 +54,7 @@ fn parse_expression() {
 #[cfg(test)]
 pub mod tests {
 
-    use syntax::{Expr::{self, Number}, Token::{self, Star}};
+    use syntax::{{Expr::{self, Number}, Operator, Token::{self, Star}},{Operator::Addition}};
 
     use crate::Parser;
 
@@ -76,7 +77,7 @@ pub mod tests {
 
         let result = parser.parse_term();
 
-        assert_eq!(result, );
+        assert_eq!(result, Ok(Expr::Binary { left: Box<Number(3.0)>, operator: Operator::Multiplication, right: Box<Number(5.0)> }));
 
     }
 }
