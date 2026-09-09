@@ -46,7 +46,8 @@ fn parse_operator(c: char) -> Option<Token> {
     }
 }
 
-fn push_number( //Function is for the final term of the string.
+fn push_number(
+    //Function is for the final term of the string.
     current_numbers: &mut String,
     tokens: &mut Vec<Token>,
 ) -> Result<(), CalculatorError> {

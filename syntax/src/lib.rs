@@ -10,13 +10,15 @@ pub enum Token {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum CalculatorError { // All possible errors that may occur
+pub enum CalculatorError {
+    // All possible errors that may occur
     InputInvalid,
     ParseError,
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Expr { // For the parser to recognise order of operations.
+pub enum Expr {
+    // For the parser to recognise order of operations.
     Number(f64),
     Binary {
         left: Box<Expr>,
