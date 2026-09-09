@@ -1,6 +1,6 @@
-use lexer::pub_lex;
+use lexer::lex;
 
 fn main() {
-    let token = pub_lex("3 + 5 - 2");
+    let token = lex("3 + 5 - 2");
     println!("{:?}", token);
 }

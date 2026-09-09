@@ -6,7 +6,16 @@ version = 4
 name = "compiler"
 version = "0.1.0"
 dependencies = [
+ "evaluator",
  "lexer",
+ "parser",
+ "syntax",
+]
+
+[[package]]
+name = "evaluator"
+version = "0.1.0"
+dependencies = [
  "parser",
  "syntax",
 ]

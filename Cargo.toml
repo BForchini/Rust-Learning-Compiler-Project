@@ -1,11 +1,6 @@
 [workspace]
 resolver = "3"
-members = [
-    "lexer",
-    "syntax",
-    "parser",
-    "compiler",
-]
+members = ["lexer", "syntax", "parser", "evaluator", "compiler"]
 
 [workspace.package]
 edition = "2024"

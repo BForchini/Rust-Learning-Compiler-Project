@@ -14,6 +14,7 @@ pub enum CalculatorError {
     // All possible errors that may occur
     InputInvalid,
     ParseError,
+    DivisionByZero,
 }
 
 #[derive(Debug, PartialEq)]

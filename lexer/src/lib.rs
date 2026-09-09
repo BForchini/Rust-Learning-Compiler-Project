@@ -3,12 +3,12 @@ use syntax::{
     Token,
 };
 
-pub fn pub_lex(input: &str) -> Result<Vec<Token>, CalculatorError> {
+pub fn lex(input: &str) -> Result<Vec<Token>, CalculatorError> {
     let trimmed = input.trim();
-    prv_lexer(trimmed)
+    tokenize(trimmed)
 }
 
-fn prv_lexer(trimmed: &str) -> Result<Vec<Token>, CalculatorError> {
+fn tokenize(trimmed: &str) -> Result<Vec<Token>, CalculatorError> {
     let mut current_number = String::new();
     let mut tokens: Vec<Token> = Vec::new();
 
@@ -69,7 +69,7 @@ pub mod tests {
 
     #[test]
     fn no_white_space() {
-        let result = pub_lex("3+5");
+        let result = lex("3+5");
 
         assert!(result.is_ok());
 
@@ -80,7 +80,7 @@ pub mod tests {
 
     #[test]
     fn one_gap_whitespace() {
-        let result = pub_lex("3 + 5");
+        let result = lex("3 + 5");
 
         assert!(result.is_ok());
 
@@ -91,7 +91,7 @@ pub mod tests {
 
     #[test]
     fn multi_integer_star() {
-        let result = pub_lex("123 * 456");
+        let result = lex("123 * 456");
 
         assert!(result.is_ok());
 
@@ -102,7 +102,7 @@ pub mod tests {
 
     #[test]
     fn multi_operator() {
-        let result = pub_lex("3 + 5 * 2");
+        let result = lex("3 + 5 * 2");
 
         assert!(result.is_ok());
 
@@ -116,7 +116,7 @@ pub mod tests {
 
     #[test]
     fn negative_num() {
-        let result = pub_lex("3 - 2");
+        let result = lex("3 - 2");
 
         assert!(result.is_ok());
 
