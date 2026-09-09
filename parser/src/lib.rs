@@ -1,4 +1,4 @@
-use syntax::CalculatorError::{InputInvalid, ParseError};
+use syntax::CalculatorError::{ParseError};
 use syntax::{CalculatorError, Expr, Operator, Token};
 
 #[derive(Debug, PartialEq)]
@@ -15,15 +15,10 @@ impl Parser {
         }
     }
 
-    fn parse_factor(&mut self) -> Result<Expr, CalculatorError> {
-        
-        /*
-        if self.position > self.tokens.len() {
-            todo!();
-        }
-        */
-        match &self.tokens[self.position] {
-            Token::Number(value) => {
+    fn parse_factor(&mut self) -> Result<Expr, CalculatorError> { // This is for numbers
+        let token = self.tokens.get(self.position).clone();
+        match token {
+            Some(Token::Number(value)) => {
                 self.position += 1;
                 Ok(Expr::Number(*value))
             }
@@ -33,21 +28,52 @@ impl Parser {
         }
     }
 
-    fn parse_term(&mut self) -> Result<Expr, CalculatorError> {
-        let left = self.parse_factor()?;
-        match &self.tokens[self.position] {
-            Token::Star => {
-                self.position += 2;
-                let right = self.parse_factor()?;
-                Ok(Expr::Binary { left: Box::new(left), operator: Operator::Addition, right: Box::new(right) })
-            }
-            _ => Err(ParseError),
-        }
+    fn peek(&self) -> Option<&Token> {
+        self.tokens.get(self.position)
     }
-}
 
-fn parse_expression() {
-    todo!()
+    fn parse_term(&mut self) -> Result<Expr, CalculatorError> { // This is for multiplication and division
+        let mut left = self.parse_factor()?;
+        loop{
+            match self.peek() {
+                Some(Token::Star) => {
+                    self.position += 1;
+                    let right = self.parse_factor()?;
+                    left = Expr::Binary { left: Box::new(left), operator: Operator::Multiplication, right: Box::new(right) };
+
+                },
+                Some(Token::Slash) => {
+                    self.position += 1;
+                    let right = self.parse_factor()?;
+                    left = Expr::Binary { left: Box::new(left), operator: Operator::Division, right: Box::new(right) };
+                },
+                _ => break,
+            }
+        }
+        Ok(left)
+    }
+
+    fn parse_expression(&mut self) -> Result<Expr, CalculatorError> { // This is for addition and subtraction
+        let mut left = self.parse_term()?;
+        loop{
+            match self.peek() {
+                Some(Token::Plus) => {
+                    self.position += 1;
+                    let right = self.parse_term()?;
+                    left = Expr::Binary { left: Box::new(left), operator: Operator::Addition, right: Box::new(right) };
+                },
+                Some(Token::Minus) => {
+                    self.position += 1;
+                    let right = self.parse_term()?;
+                    left = Expr::Binary { left: Box::new(left), operator: Operator::Subtraction, right: Box::new(right) };
+                },
+                _ => break,
+                
+            }
+        }
+        Ok(left)
+
+    }
 }
 
 
@@ -77,7 +103,85 @@ pub mod tests {
 
         let result = parser.parse_term();
 
-        assert_eq!(result, Ok(Expr::Binary { left: Box<Number(3.0)>, operator: Operator::Multiplication, right: Box<Number(5.0)> }));
+        assert_eq!(result, Ok(Expr::Binary { left: Box::new(Expr::Number(3.0)), operator: Operator::Multiplication, right: Box::new(Expr::Number(5.0)) }));
 
     }
+
+    #[test]
+    fn multi_number() {
+        let tokens = vec![Token::Number(3.0), Token::Star, Token::Number(5.0), Token::Star, Token::Number(4.0)];
+
+        let mut parser = Parser::new(tokens);
+
+        let result = parser.parse_term();
+
+        assert_eq!(result, Ok(Expr::Binary{left: Box::new(Expr::Binary { left: Box::new(Expr::Number(3.0)), operator: Operator::Multiplication, right: Box::new(Expr::Number(5.0)) }) , operator: Operator::Multiplication, right: Box::new(Expr::Number(4.0)) }));
+    }
+
+    #[test]
+    fn division() {
+        let tokens = vec![Token::Number(3.0), Token::Slash, Token::Number(5.0)];
+
+        let mut parser = Parser::new(tokens);
+
+        let result = parser.parse_term();
+
+        assert_eq!(result, Ok(Expr::Binary { left: Box::new(Number(3.0)), operator: Operator::Division, right: Box::new(Number(5.0)) }));
+    }
+
+    #[test]
+    fn multi_operator() {
+        let tokens = vec![Token::Number(3.0), Token::Slash, Token::Number(5.0), Token::Star, Token::Number(4.0)];
+
+        let mut parser = Parser::new(tokens);
+
+        let result = parser.parse_term();
+
+        assert_eq!(result, Ok(Expr::Binary{left: Box::new(Expr::Binary { left: Box::new(Expr::Number(3.0)), operator: Operator::Division, right: Box::new(Expr::Number(5.0)) }) , operator: Operator::Multiplication, right: Box::new(Expr::Number(4.0)) }));
+    }
+
+    #[test]
+    fn addition() {
+        let tokens = vec![Token::Number(3.0), Token::Plus, Token::Number(5.0)];
+
+        let mut parser = Parser::new(tokens);
+
+        let result = parser.parse_expression();
+
+        assert_eq!(result, Ok(Expr::Binary { left: Box::new(Number(3.0)), operator: Operator::Addition, right: Box::new(Number(5.0)) }));
+    }
+
+    #[test]
+    fn addition_and_multiplication() {
+        let tokens = vec![Token::Number(3.0), Token::Star, Token::Number(5.0), Token::Plus, Token::Number(4.0)];
+
+        let mut parser = Parser::new(tokens);
+
+        let result = parser.parse_expression();
+
+        assert_eq!(result, Ok(Expr::Binary{left: Box::new(Expr::Binary { left: Box::new(Expr::Number(3.0)), operator: Operator::Multiplication, right: Box::new(Expr::Number(5.0)) }) , operator: Operator::Addition, right: Box::new(Expr::Number(4.0)) }));
+    }
+
+    #[test]
+    fn addition_and_addition() {
+        let tokens = vec![Token::Number(3.0), Token::Plus, Token::Number(5.0), Token::Plus, Token::Number(4.0)];
+
+        let mut parser = Parser::new(tokens);
+
+        let result = parser.parse_expression();
+
+        assert_eq!(result, Ok(Expr::Binary{left: Box::new(Expr::Binary { left: Box::new(Expr::Number(3.0)), operator: Operator::Addition, right: Box::new(Expr::Number(5.0)) }) , operator: Operator::Addition, right: Box::new(Expr::Number(4.0)) }));
+    }
+
+    #[test]
+    fn addition_and_multiplication_reversed() {
+        let tokens = vec![Token::Number(3.0), Token::Plus, Token::Number(5.0), Token::Star, Token::Number(4.0)];
+
+        let mut parser = Parser::new(tokens);
+
+        let result = parser.parse_expression();
+
+        assert_eq!(result, Ok(Expr::Binary{left: Box::new(Number(3.0)) , operator: Operator::Addition, right: Box::new(Expr::Binary { left: Box::new(Expr::Number(5.0)), operator: Operator::Multiplication, right: Box::new(Expr::Number(4.0)) })}));
+    }
+
 }
