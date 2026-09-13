@@ -1,6 +1,8 @@
 use lexer::lex;
 
 fn main() {
-    let token = lex("3 + 5 - 2");
-    println!("{:?}", token);
+    match lex("2 + 3") {
+        Ok(tokens) => println!("{:?}", tokens),
+        Err(error) => println!("{}", error),
+    }
 }

@@ -3,6 +3,7 @@ use syntax::{
     Token,
 };
 
+
 pub fn lex(input: &str) -> Result<Vec<Token>, CalculatorError> {
     let trimmed = input.trim();
     tokenize(trimmed)
@@ -17,9 +18,7 @@ fn tokenize(trimmed: &str) -> Result<Vec<Token>, CalculatorError> {
             current_number.push(c);
         } else if let Some(oper) = parse_operator(c) {
             if !current_number.is_empty() {
-                let value = current_number
-                    .parse::<f64>()
-                    .map_err(|_| CalculatorError::ParseError)?;
+                let value = current_number.parse::<f64>()?;
                 tokens.push(Token::Number(value));
                 current_number = String::new();
                 tokens.push(oper);
@@ -32,7 +31,7 @@ fn tokenize(trimmed: &str) -> Result<Vec<Token>, CalculatorError> {
     if !current_number.is_empty() {
         push_number(&mut current_number, &mut tokens)?;
     }
-
+    
     Ok(tokens)
 }
 
@@ -52,9 +51,7 @@ fn push_number(
     tokens: &mut Vec<Token>,
 ) -> Result<(), CalculatorError> {
     if !current_numbers.is_empty() {
-        let value = current_numbers
-            .parse::<f64>()
-            .map_err(|_| CalculatorError::ParseError)?;
+        let value = current_numbers.parse::<f64>()?;
         tokens.push(Token::Number(value));
         current_numbers.clear();
     }
@@ -98,6 +95,19 @@ pub mod tests {
         let tokens = result.unwrap();
 
         assert_eq!(tokens, vec![Number(123.0), Star, Number(456.0)]);
+    }
+
+    #[test]
+    fn number_parse_error() {
+        let mut current_number = String::from("not-a-number");
+        let mut tokens = Vec::new();
+
+        let result = push_number(&mut current_number, &mut tokens);
+
+        assert!(matches!(
+            result,
+            Err(syntax::CalculatorError::NumberParse(_))
+        ));
     }
 
     #[test]

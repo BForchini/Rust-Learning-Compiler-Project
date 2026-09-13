@@ -93,13 +93,12 @@ impl Parser {
 #[cfg(test)]
 pub mod tests {
 
+    use std::vec;
+
     use syntax::{
-        Operator::Addition,
-        {
-            Expr::{self, Number},
-            Operator,
-            Token::{self, Star},
-        },
+        CalculatorError::ParseError,
+        Expr::{self, Number},
+        Operator, Token,
     };
 
     use crate::Parser;
@@ -113,6 +112,17 @@ pub mod tests {
         let result = parser.parse_factor();
 
         assert_eq!(result, Ok(Expr::Number(3.0)));
+    }
+
+    #[test]
+    fn parse_error() {
+        let tokens = vec![Token::Number(3.0), Token::Slash];
+
+        let mut parser = Parser::new(tokens);
+
+        let result = parser.parse_expression();
+
+        assert_eq!(result, Err(ParseError));
     }
 
     #[test]

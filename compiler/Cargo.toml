@@ -9,3 +9,4 @@ lexer = { path = "../lexer" }
 parser = { path = "../parser" }
 syntax = { version = "0.1.0", path = "../syntax" }
 evaluator = { path = "../evaluator" }
+ir = { path = "../IR" }
