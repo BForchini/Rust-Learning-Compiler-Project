@@ -7,6 +7,6 @@ license.workspace = true
 [dependencies]
 lexer = { path = "../lexer" }
 parser = { path = "../parser" }
-syntax = { version = "0.1.0", path = "../syntax" }
+syntax = { path = "../syntax" }
 evaluator = { path = "../evaluator" }
 ir = { path = "../IR" }

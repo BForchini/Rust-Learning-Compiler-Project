@@ -39,6 +39,8 @@ pub enum CalculatorError {
     InputInvalid,
     #[error("Division by zero occurred")]
     DivisionByZero,
+    #[error("Ir generation error")]
+    IrError,
 }
 
 #[derive(Debug, PartialEq)]
@@ -58,4 +60,34 @@ pub enum Operator {
     Subtraction,
     Division,
     Multiplication,
+}
+
+pub type Temp = usize;
+
+#[derive(Debug, PartialEq)]
+pub enum Instructions {
+    LoadConstant {
+        value: f64,
+        destination: Temp,
+    },
+    Add {
+        left: Temp,
+        right: Temp,
+        destination: Temp,
+    },
+    Subtract {
+        left: Temp,
+        right: Temp,
+        destination: Temp,
+    },
+    Multiply {
+        left: Temp,
+        right: Temp,
+        destination: Temp,
+    },
+    Divide {
+        left: Temp,
+        right: Temp,
+        destination: Temp,
+    },
 }
