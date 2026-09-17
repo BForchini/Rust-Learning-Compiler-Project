@@ -3,7 +3,6 @@ use syntax::{
     Token,
 };
 
-
 pub fn lex(input: &str) -> Result<Vec<Token>, CalculatorError> {
     let trimmed = input.trim();
     tokenize(trimmed)
@@ -31,7 +30,7 @@ fn tokenize(trimmed: &str) -> Result<Vec<Token>, CalculatorError> {
     if !current_number.is_empty() {
         push_number(&mut current_number, &mut tokens)?;
     }
-    
+
     Ok(tokens)
 }
 

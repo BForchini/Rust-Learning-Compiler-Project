@@ -11,12 +11,12 @@ pub enum Token {
     RightParen, // )
 }
 
-/* 
+/*
 #[derive(Debug, PartialEq, thiserror::Error)]
 pub enum CompilerError {
     #[error("lexing failed: {0}")]
     Lex(#[from] LexerError),
-    
+
     #[error("parsing failed: {0}")]
     Parse(#[from] ParseError),
 
