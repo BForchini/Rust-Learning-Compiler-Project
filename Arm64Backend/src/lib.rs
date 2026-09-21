@@ -1,5 +1,5 @@
-use syntax::{Instructions, Temp};
 use ir::Program;
+use syntax::{Instructions, Temp};
 /*
 #[derive(Debug, PartialEq)]
 pub struct Program {
@@ -19,7 +19,6 @@ struct Arm64Backend {
     asm: String,
 }
 
-
 impl Arm64Backend {
     pub fn generate(&mut self, program: &Program) {
         for instruction in &program.instructions {
@@ -31,28 +30,28 @@ impl Arm64Backend {
         match instruction {
             Instructions::LoadConstant { value, destination } => {
                 self.emit_load_constant(*value, *destination);
-            },
+            }
             Instructions::Add {
                 left,
                 right,
                 destination,
             } => {
                 self.emit_add(*left, *right, *destination);
-            },
+            }
             Instructions::Subtract {
                 left,
                 right,
                 destination,
             } => {
                 self.emit_sub(*left, *right, *destination);
-            },
+            }
             Instructions::Multiply {
                 left,
                 right,
                 destination,
             } => {
                 self.emit_mul(*left, *right, *destination);
-            },
+            }
             Instructions::Divide {
                 left,
                 right,
@@ -62,7 +61,6 @@ impl Arm64Backend {
             }
         }
     }
-
 
     fn emit_load_constant(&mut self, value: f64, destination: Temp) {
         /*
@@ -75,38 +73,38 @@ impl Arm64Backend {
     }
 
     fn emit_add(&mut self, left: Temp, right: Temp, destination: Temp) {
-        self.asm.push_str("fadd d{destination}, d{left}, d{right} ");
+        self.asm
+            .push_str(&format!("fadd d{destination}, d{left}, d{right} "));
     }
     fn emit_sub(&mut self, left: Temp, right: Temp, destination: Temp) {
-        self.asm.push_str("fsub d{destination}, d{left}, d{right} ");
+        self.asm
+            .push_str(&format!("fsub d{destination}, d{left}, d{right} "));
     }
     fn emit_mul(&mut self, left: Temp, right: Temp, destination: Temp) {
-        self.asm.push_str("fmul d{destination}, d{left}, d{right} ");
+        self.asm
+            .push_str(&format!("fmul d{destination}, d{left}, d{right} "));
     }
     fn emit_div(&mut self, left: Temp, right: Temp, destination: Temp) {
-        self.asm.push_str("fdiv d{destination}, d{left}, d{right} ");
+        self.asm
+            .push_str(&format!("fdiv d{destination}, d{left}, d{right} "));
     }
-
 }
 
 // i need to have a string final depending on the operators present idk deal with tommorow
 
-
-
 #[cfg(test)]
 pub mod tests {
-    
-    use syntax::Instructions;
-    use ir::Program;
+
     use crate::Arm64Backend;
+    use ir::Program;
 
     #[test]
     fn simple_load_constant() {
-        let intro: &Program = &Program::new();
-        let instructions: &Instructions = Instructions::LoadConstant { value: 5.0, destination: 0 };
+        let program = Program::new();
+        let mut backend = Arm64Backend { asm: String::new() };
 
-        let result = intro.self.generate()
+        backend.generate(&program);
 
+        assert!(backend.asm.is_empty());
     }
-
 }
