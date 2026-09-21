@@ -3,9 +3,18 @@
 version = 4
 
 [[package]]
+name = "Arm64Backend"
+version = "0.1.0"
+dependencies = [
+ "ir",
+ "syntax",
+]
+
+[[package]]
 name = "compiler"
 version = "0.1.0"
 dependencies = [
+ "Arm64Backend",
  "evaluator",
  "ir",
  "lexer",

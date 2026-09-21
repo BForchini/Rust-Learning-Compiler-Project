@@ -1,0 +1,9 @@
+[package]
+name = "Arm64Backend"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+syntax = { path = "../syntax"}
+ir = { path = "../IR"}

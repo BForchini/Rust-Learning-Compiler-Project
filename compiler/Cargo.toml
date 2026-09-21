@@ -10,3 +10,4 @@ parser = { path = "../parser" }
 syntax = { path = "../syntax" }
 evaluator = { path = "../evaluator" }
 ir = { path = "../IR" }
+Arm64Backend = { path = "../Arm64Backend"}
