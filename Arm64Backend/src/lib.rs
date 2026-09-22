@@ -63,48 +63,59 @@ impl Arm64Backend {
     }
 
     fn emit_load_constant(&mut self, value: f64, destination: Temp) {
-        /*
-        _emit_load_constant:
-        sub     sp, sp, #16
-        str     w0, [sp, #12]
-        add     sp, sp, #16
-        ret
-        */
+        let bits: u32 = (value as f32).to_bits();
+        self.asm
+            .push_str(&format!("LDR d{destination}, =0x{bits:08X}\n"));
     }
 
     fn emit_add(&mut self, left: Temp, right: Temp, destination: Temp) {
         self.asm
-            .push_str(&format!("fadd d{destination}, d{left}, d{right} "));
+            .push_str(&format!("fadd d{destination}, d{left}, d{right}\n"));
     }
+
     fn emit_sub(&mut self, left: Temp, right: Temp, destination: Temp) {
         self.asm
-            .push_str(&format!("fsub d{destination}, d{left}, d{right} "));
+            .push_str(&format!("fsub d{destination}, d{left}, d{right}\n"));
     }
+
     fn emit_mul(&mut self, left: Temp, right: Temp, destination: Temp) {
         self.asm
-            .push_str(&format!("fmul d{destination}, d{left}, d{right} "));
+            .push_str(&format!("fmul d{destination}, d{left}, d{right}\n"));
     }
+
     fn emit_div(&mut self, left: Temp, right: Temp, destination: Temp) {
         self.asm
-            .push_str(&format!("fdiv d{destination}, d{left}, d{right} "));
+            .push_str(&format!("fdiv d{destination}, d{left}, d{right}\n"));
     }
 }
-
-// i need to have a string final depending on the operators present idk deal with tommorow
 
 #[cfg(test)]
 pub mod tests {
 
     use crate::Arm64Backend;
     use ir::Program;
+    use syntax::{Expr, Operator};
 
     #[test]
-    fn simple_load_constant() {
-        let program = Program::new();
+    fn addition_emits_arm_code() {
+        let mut program = Program::new();
         let mut backend = Arm64Backend { asm: String::new() };
+
+        let expr = Expr::Binary {
+            left: Box::new(Expr::Number(5.0)),
+            operator: Operator::Addition,
+            right: Box::new(Expr::Number(3.0)),
+        };
+
+        let result = program.generate_ir(&expr);
+        assert_eq!(result, Ok(2));
 
         backend.generate(&program);
 
-        assert!(backend.asm.is_empty());
+        assert_eq!(
+            backend.asm,
+            "LDR d0, =0x40A00000\nLDR d1, =0x40400000\nfadd d2, d0, d1\n"
+        );
     }
+    //make tests for the other operators
 }
