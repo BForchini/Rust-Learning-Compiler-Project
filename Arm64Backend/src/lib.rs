@@ -1,3 +1,5 @@
+use std::{arch::{asm, global_asm}, fmt::format};
+
 use ir::Program;
 use syntax::{Instructions, Temp};
 /*
@@ -89,13 +91,35 @@ impl Arm64Backend {
     }
 }
 
+pub fn run_aarch64_f32(asm: String){
+    unsafe {
+        asm!(
+            ""(asm)
+        );
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
 
     use crate::Arm64Backend;
-    use ir::Program;
+    use ir::{Expr::Number, Program};
     use syntax::{Expr, Operator};
 
+    #[test]
+    fn simple_emit_constant_code() {
+        let mut program = Program::new();
+        let mut backend = Arm64Backend { asm: String::new() };
+
+        let expr = Box::new(Number(5.0));
+
+        let result = program.generate_ir(&expr);
+        assert_eq!(result, Ok(0));
+
+        backend.generate(&program);
+
+        assert_eq!(backend.asm, "LDR d0, =0x40A00000\n");
+    }
     #[test]
     fn addition_emits_arm_code() {
         let mut program = Program::new();
@@ -117,5 +141,67 @@ pub mod tests {
             "LDR d0, =0x40A00000\nLDR d1, =0x40400000\nfadd d2, d0, d1\n"
         );
     }
-    //make tests for the other operators
+    #[test]
+    fn subtraction_emits_arm_code() {
+        let mut program = Program::new();
+        let mut backend = Arm64Backend { asm: String::new() };
+
+        let expr = Expr::Binary {
+            left: Box::new(Expr::Number(5.0)),
+            operator: Operator::Subtraction,
+            right: Box::new(Expr::Number(3.0)),
+        };
+
+        let result = program.generate_ir(&expr);
+        assert_eq!(result, Ok(2));
+
+        backend.generate(&program);
+
+        assert_eq!(
+            backend.asm,
+            "LDR d0, =0x40A00000\nLDR d1, =0x40400000\nfsub d2, d0, d1\n"
+        );
+    }
+    #[test]
+    fn multiplication_emits_arm_code() {
+        let mut program = Program::new();
+        let mut backend = Arm64Backend { asm: String::new() };
+
+        let expr = Expr::Binary {
+            left: Box::new(Expr::Number(5.0)),
+            operator: Operator::Multiplication,
+            right: Box::new(Expr::Number(3.0)),
+        };
+
+        let result = program.generate_ir(&expr);
+        assert_eq!(result, Ok(2));
+
+        backend.generate(&program);
+
+        assert_eq!(
+            backend.asm,
+            "LDR d0, =0x40A00000\nLDR d1, =0x40400000\nfmul d2, d0, d1\n"
+        );
+    }
+    #[test]
+    fn division_emits_arm_code() {
+        let mut program = Program::new();
+        let mut backend = Arm64Backend { asm: String::new() };
+
+        let expr = Expr::Binary {
+            left: Box::new(Expr::Number(5.0)),
+            operator: Operator::Division,
+            right: Box::new(Expr::Number(3.0)),
+        };
+
+        let result = program.generate_ir(&expr);
+        assert_eq!(result, Ok(2));
+
+        backend.generate(&program);
+
+        assert_eq!(
+            backend.asm,
+            "LDR d0, =0x40A00000\nLDR d1, =0x40400000\nfdiv d2, d0, d1\n"
+        );
+    }
 }
