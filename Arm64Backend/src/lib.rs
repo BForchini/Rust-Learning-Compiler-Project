@@ -1,4 +1,7 @@
-use std::{arch::{asm, global_asm}, fmt::format};
+use std::{
+    arch::{asm, global_asm},
+    fmt::format,
+};
 
 use ir::Program;
 use syntax::{Instructions, Temp};
@@ -65,9 +68,9 @@ impl Arm64Backend {
     }
 
     fn emit_load_constant(&mut self, value: f64, destination: Temp) {
-        let bits: u32 = (value as f32).to_bits();
+        let bits: u64 = value.to_bits();
         self.asm
-            .push_str(&format!("LDR d{destination}, =0x{bits:08X}\n"));
+            .push_str(&format!("LDR d{destination}, =0x{bits:16X}\n"));
     }
 
     fn emit_add(&mut self, left: Temp, right: Temp, destination: Temp) {
@@ -110,7 +113,7 @@ pub mod tests {
 
         backend.generate(&program);
 
-        assert_eq!(backend.asm, "LDR d0, =0x40A00000\n");
+        assert_eq!(backend.asm, "LDR d0, =0x4014000000000000\n");
     }
     #[test]
     fn addition_emits_arm_code() {
@@ -130,7 +133,7 @@ pub mod tests {
 
         assert_eq!(
             backend.asm,
-            "LDR d0, =0x40A00000\nLDR d1, =0x40400000\nfadd d2, d0, d1\n"
+            "LDR d0, =0x4014000000000000\nLDR d1, =0x4008000000000000\nfadd d2, d0, d1\n"
         );
     }
     #[test]
@@ -151,7 +154,7 @@ pub mod tests {
 
         assert_eq!(
             backend.asm,
-            "LDR d0, =0x40A00000\nLDR d1, =0x40400000\nfsub d2, d0, d1\n"
+            "LDR d0, =0x4014000000000000\nLDR d1, =0x4008000000000000\nfsub d2, d0, d1\n"
         );
     }
     #[test]
@@ -172,7 +175,7 @@ pub mod tests {
 
         assert_eq!(
             backend.asm,
-            "LDR d0, =0x40A00000\nLDR d1, =0x40400000\nfmul d2, d0, d1\n"
+            "LDR d0, =0x4014000000000000\nLDR d1, =0x4008000000000000\nfmul d2, d0, d1\n"
         );
     }
     #[test]
@@ -193,7 +196,31 @@ pub mod tests {
 
         assert_eq!(
             backend.asm,
-            "LDR d0, =0x40A00000\nLDR d1, =0x40400000\nfdiv d2, d0, d1\n"
+            "LDR d0, =0x4014000000000000\nLDR d1, =0x4008000000000000\nfdiv d2, d0, d1\n"
+        );
+    }
+    #[test]
+    fn addition_multiplication_emits_arm_code() {
+        let mut program = Program::new();
+        let mut backend = Arm64Backend { asm: String::new() };
+
+        let expr = Expr::Binary {
+            left: Box::new(Expr::Binary {
+                left: Box::new(Expr::Number(5.0)),
+                operator: Operator::Multiplication,
+                right: Box::new(Expr::Number(3.0)),
+            }),
+            operator: Operator::Addition,
+            right: Box::new(Expr::Number(4.0)),
+        };
+        let result = program.generate_ir(&expr);
+        assert_eq!(result, Ok(4));
+
+        backend.generate(&program);
+
+        assert_eq!(
+            backend.asm,
+            "LDR d0, =0x4014000000000000\nLDR d1, =0x4008000000000000\nfmul d2, d0, d1\nLDR d3, =0x4010000000000000\nfadd d4, d2, d3\n"
         );
     }
 }
