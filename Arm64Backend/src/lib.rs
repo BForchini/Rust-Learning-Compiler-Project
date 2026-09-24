@@ -91,14 +91,6 @@ impl Arm64Backend {
     }
 }
 
-pub fn run_aarch64_f32(asm: String){
-    unsafe {
-        asm!(
-            ""(asm)
-        );
-    }
-}
-
 #[cfg(test)]
 pub mod tests {
 
