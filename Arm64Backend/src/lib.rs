@@ -1,5 +1,5 @@
 use ir::Program;
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 use syntax::{Instructions, Temp};
 use thiserror::Error;
 

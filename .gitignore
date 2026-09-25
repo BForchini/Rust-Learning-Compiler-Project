@@ -1,4 +1,15 @@
 /target/
+
+# Generated native compiler artifacts outside Cargo's target directory
+/build/
+/out/
+*.o
+*.obj
+*.a
+*.so
+*.dll
+*.dylib
+
 .DS_Store
 *.d
 *.rmeta
