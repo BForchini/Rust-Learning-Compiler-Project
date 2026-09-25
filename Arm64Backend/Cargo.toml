@@ -7,3 +7,4 @@ license.workspace = true
 [dependencies]
 syntax = { path = "../syntax"}
 ir = { path = "../IR"}
+thiserror = "2.0.21"

@@ -1,5 +1,4 @@
 use thiserror::Error;
-use std::{io, path::PathBuf};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
@@ -11,24 +10,6 @@ pub enum Token {
     LeftParen,  // (
     RightParen, // )
 }
-
-/*
-#[derive(Debug, PartialEq, thiserror::Error)]
-pub enum CompilerError {
-    #[error("lexing failed: {0}")]
-    Lex(#[from] LexerError),
-
-    #[error("parsing failed: {0}")]
-    Parse(#[from] ParseError),
-
-    #[error("IR generation failed: {0}")]
-    Ir(#[from] IrError),
-}
-
-let tokens = lex(input)?;
-let ast = parse(tokens)?;
-let ir = generate_ir(ast)?;
-*/
 
 #[derive(Debug, PartialEq, Error)]
 pub enum CalculatorError {
@@ -42,28 +23,6 @@ pub enum CalculatorError {
     DivisionByZero,
     #[error("Ir generation error")]
     IrError,
-}
-
-#[derive(Debug, Error)]
-pub enum BackendError {
-    #[error("invalid register d{temp} at IR instruction {instruction}")]
-    InvalidRegister { temp: usize },
-
-    #[error("failed to write assembly file {path}: {source}")]
-    WriteAssembly {
-        path: PathBuf,
-        #[source]
-        source: io::Error,
-    },
-
-    #[error("assembler failed with status {status}")]
-    AssemblerFailed { status: std::process::ExitStatus },
-
-    #[error("failed to start assembler: {source}")]
-    AssemblerIo {
-        #[source]
-        source: io::Error,
-    },
 }
 
 #[derive(Debug, PartialEq)]
@@ -87,7 +46,7 @@ pub enum Operator {
 
 pub type Temp = usize;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Instructions {
     LoadConstant {
         value: f64,
