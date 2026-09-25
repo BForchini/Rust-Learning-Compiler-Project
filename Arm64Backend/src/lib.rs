@@ -1,33 +1,35 @@
-use std::{
-    arch::{asm, global_asm},
-    fmt::format,
-};
+use std::path::PathBuf;
 
 use ir::Program;
-use syntax::{Instructions, Temp};
-/*
-#[derive(Debug, PartialEq)]
-pub struct Program {
-    pub instructions: Vec<Instructions>,
-    next_temp: usize,
-    // Result if fail?
-}
-
-    program.instructions,
-    vec![Instructions::LoadConstant {
-        value: 5.0,
-        destination: 0
-    }]
-*/
+use syntax::{BackendError, Instructions, Temp};
 
 struct Arm64Backend {
     asm: String,
 }
 
 impl Arm64Backend {
+
     pub fn generate(&mut self, program: &Program) {
         for instruction in &program.instructions {
             self.emit_instruction(instruction);
+        }
+    }
+
+    fn write_asm(&mut self, path: impl Into<PathBuf>,) -> Result<(), BackendError> {
+        let path = path.into();
+        std::fs::write(&path, self.create_asm()).map_err(|source| {
+            BackendError::WriteAssembly { path, source }
+        })
+    }
+
+    fn create_asm(&mut self) -> String {
+        format!(".text\n{}", self.asm)
+    }
+    pub fn validate_temp(temp: Temp) -> Result<(), BackendError> {
+        if temp > 31 {
+            Err(BackendError::InvalidRegister { temp })
+        } else {
+            Ok(())
         }
     }
 
@@ -67,30 +69,50 @@ impl Arm64Backend {
         }
     }
 
-    fn emit_load_constant(&mut self, value: f64, destination: Temp) {
+    fn emit_load_constant(&mut self, value: f64, destination: Temp) -> Result<(), BackendError> {
+        for temp in [destination] {
+            Self::validate_temp(temp)?;
+        }
         let bits: u64 = value.to_bits();
         self.asm
             .push_str(&format!("LDR d{destination}, =0x{bits:16X}\n"));
+        Ok(())
     }
 
-    fn emit_add(&mut self, left: Temp, right: Temp, destination: Temp) {
+    fn emit_add(&mut self, left: Temp, right: Temp, destination: Temp) -> Result<(), BackendError> {
+        for temp in [left, right, destination] {
+            Self::validate_temp(temp)?;
+        }
         self.asm
             .push_str(&format!("fadd d{destination}, d{left}, d{right}\n"));
+        Ok(())
     }
 
-    fn emit_sub(&mut self, left: Temp, right: Temp, destination: Temp) {
+    fn emit_sub(&mut self, left: Temp, right: Temp, destination: Temp) -> Result<(), BackendError> {
+        for temp in [left, right, destination] {
+            Self::validate_temp(temp)?;
+        }
         self.asm
             .push_str(&format!("fsub d{destination}, d{left}, d{right}\n"));
+        Ok(())
     }
 
-    fn emit_mul(&mut self, left: Temp, right: Temp, destination: Temp) {
+    fn emit_mul(&mut self, left: Temp, right: Temp, destination: Temp) -> Result<(), BackendError> {
+        for temp in [left, right, destination] {
+            Self::validate_temp(temp)?;
+        }
         self.asm
             .push_str(&format!("fmul d{destination}, d{left}, d{right}\n"));
+        Ok(())
     }
 
-    fn emit_div(&mut self, left: Temp, right: Temp, destination: Temp) {
+    fn emit_div(&mut self, left: Temp, right: Temp, destination: Temp) -> Result<(), BackendError> {
+        for temp in [left, right, destination] {
+            Self::validate_temp(temp)?;
+        }
         self.asm
             .push_str(&format!("fdiv d{destination}, d{left}, d{right}\n"));
+        Ok(())
     }
 }
 

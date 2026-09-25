@@ -1,4 +1,5 @@
 use thiserror::Error;
+use std::{io, path::PathBuf};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
@@ -41,6 +42,28 @@ pub enum CalculatorError {
     DivisionByZero,
     #[error("Ir generation error")]
     IrError,
+}
+
+#[derive(Debug, Error)]
+pub enum BackendError {
+    #[error("invalid register d{temp} at IR instruction {instruction}")]
+    InvalidRegister { temp: usize },
+
+    #[error("failed to write assembly file {path}: {source}")]
+    WriteAssembly {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+
+    #[error("assembler failed with status {status}")]
+    AssemblerFailed { status: std::process::ExitStatus },
+
+    #[error("failed to start assembler: {source}")]
+    AssemblerIo {
+        #[source]
+        source: io::Error,
+    },
 }
 
 #[derive(Debug, PartialEq)]
