@@ -74,7 +74,6 @@ impl Arm64Backend {
     }
 
     pub fn create_asm(&self) -> String {
-        let final_destination: usize = 0;
         format!(
             ".text\n.globl _main\n.p2align 2\n_main:\n{}ret\n.section __TEXT,__const\n{}", //i need to fmov d0, d{final_destination}
             self.asm, self.literal_pool
@@ -376,8 +375,7 @@ pub mod tests {
             literal_pool: String::new(),
         };
 
-        let result = program.generate_ir(&expr)?;
-        backend.generate_to_file(&program, result, path)?;
+        let result = program.generate_ir(&expr);
         assert_eq!(result, Ok(2));
 
         backend.generate(&program).unwrap();
@@ -408,7 +406,6 @@ pub mod tests {
         };
 
         let result = program.generate_ir(&expr);
-        backend.generate_to_file(&program, path, result)?;
         assert_eq!(result, Ok(2));
 
         backend.generate(&program).unwrap();
