@@ -5,7 +5,6 @@ pub use syntax::{CalculatorError::IrError, Expr, Operator};
 pub struct Program {
     pub instructions: Vec<Instructions>,
     next_temp: usize,
-    // Result if fail?
 }
 
 impl Program {
@@ -23,6 +22,7 @@ impl Program {
         self.next_temp += 1;
         temp
     }
+
 
     pub fn generate_ir(&mut self, expr: &Expr) -> Result<Temp, CalculatorError> {
         match expr {

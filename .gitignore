@@ -15,3 +15,5 @@
 *.rmeta
 *.pdb
 *.exe
+Arm64Backend/target/aarch64-apple-darwin/debug/asm/expression.s
+Arm64Backend/target/aarch64-apple-darwin/debug/asm/expression.s

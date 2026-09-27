@@ -49,14 +49,16 @@ impl Arm64Backend {
         &mut self,
         program: &Program,
         path: impl Into<PathBuf> + std::convert::AsRef<std::path::Path>,
+        result_temp: Temp,
     ) -> Result<(), BackendError> {
         self.generate(program)?;
-        self.write_asm(path)
+        self.write_asm(path, result_temp)
     }
 
     pub fn write_asm(
         &self,
         path: impl Into<PathBuf> + std::convert::AsRef<std::path::Path>,
+        result_temp: Temp
     ) -> Result<(), BackendError> {
         let path = path.as_ref();
 
@@ -67,16 +69,16 @@ impl Arm64Backend {
             })?;
         }
 
-        std::fs::write(path, self.create_asm()).map_err(|source| BackendError::WriteAssembly {
+        std::fs::write(path, self.create_asm(result_temp)).map_err(|source| BackendError::WriteAssembly {
             path: path.to_path_buf(),
             source,
         })
     }
 
-    pub fn create_asm(&self) -> String {
+    pub fn create_asm(&self, result_temp: Temp) -> String {
         format!(
-            ".text\n.globl _main\n.p2align 2\n_main:\n{}ret\n.section __TEXT,__const\n{}", //i need to fmov d0, d{final_destination}
-            self.asm, self.literal_pool
+            ".text\n.globl _main\n.p2align 2\n_main:\n{}fmov d0, d{result_temp}\nret\n.section __TEXT,__const\n{}", //i need to fmov d0, d{final_destination}
+            self.asm, self.literal_pool,
         )
     }
 
@@ -194,13 +196,12 @@ pub mod tests {
             asm: String::new(),
             literal_pool: String::new(),
         };
-
+        
         let expr = Box::new(Number(5.0));
-
-        let result = program.generate_ir(&expr);
-        assert_eq!(result, Ok(0));
-
+        let result_temp = program.generate_ir(&expr).unwrap();
         backend.generate(&program).unwrap();
+
+        assert_eq!(result_temp,0);
 
         assert_eq!(
             backend.asm,
@@ -340,8 +341,8 @@ pub mod tests {
             literal_pool: String::new(),
         };
 
-        let result = program.generate_ir(&expr);
-        assert_eq!(result, Ok(0));
+        let result_temp = program.generate_ir(&expr).unwrap();
+        assert_eq!(result_temp, 0);
 
         backend.generate(&program).unwrap();
 
@@ -351,12 +352,13 @@ pub mod tests {
         );
         assert!(
             backend
-                .create_asm()
+                .create_asm(result_temp)
                 .starts_with(".text\n.globl _main\n.p2align 2\n_main:\n")
         );
         backend.generate_to_file(
             &program,
             "target/aarch64-apple-darwin/debug/asm/expression.s",
+            result_temp,
         )?;
 
         Ok(())
@@ -375,8 +377,8 @@ pub mod tests {
             literal_pool: String::new(),
         };
 
-        let result = program.generate_ir(&expr);
-        assert_eq!(result, Ok(2));
+        let result_temp = program.generate_ir(&expr).unwrap();
+        assert_eq!(result_temp, 2);
 
         backend.generate(&program).unwrap();
 
@@ -387,6 +389,7 @@ pub mod tests {
         backend.generate_to_file(
             &program,
             "target/aarch64-apple-darwin/debug/asm/expression.s",
+            result_temp
         )?;
 
         Ok(())
@@ -405,8 +408,8 @@ pub mod tests {
             literal_pool: String::new(),
         };
 
-        let result = program.generate_ir(&expr);
-        assert_eq!(result, Ok(2));
+        let result_temp = program.generate_ir(&expr).unwrap();
+        assert_eq!(result_temp, 2);
 
         backend.generate(&program).unwrap();
 
@@ -417,6 +420,7 @@ pub mod tests {
         backend.generate_to_file(
             &program,
             "target/aarch64-unknown-linux-gnu/debug/asm/expression.s",
+            result_temp
         )?;
 
         Ok(())

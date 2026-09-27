@@ -7,6 +7,7 @@ ldr d0, [x16, Lconst0@PAGEOFF]
 adrp x16, Lconst1@PAGE
 ldr d1, [x16, Lconst1@PAGEOFF]
 fadd d2, d0, d1
+fmov d0, d2
 ret
 .section __TEXT,__const
 .p2align 3
