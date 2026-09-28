@@ -77,7 +77,7 @@ impl Arm64Backend {
 
     pub fn create_asm(&self, result_temp: Temp) -> String {
         format!(
-            ".text\n.globl _main\n.p2align 2\n_main:\n{}fmov d0, d{result_temp}\nret\n.section __TEXT,__const\n{}", //i need to fmov d0, d{final_destination}
+            ".text\n.globl _main\n.p2align 2\n_main:\n{}mov x0, #0\nfmov d0, d{result_temp}\nret\n.section __TEXT,__const\n{}", //i need to fmov d0, d{final_destination}
             self.asm, self.literal_pool,
         )
     }
