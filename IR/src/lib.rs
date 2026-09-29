@@ -23,7 +23,6 @@ impl Program {
         temp
     }
 
-
     pub fn generate_ir(&mut self, expr: &Expr) -> Result<Temp, CalculatorError> {
         match expr {
             Number(value) => {

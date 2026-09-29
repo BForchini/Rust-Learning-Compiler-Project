@@ -58,7 +58,7 @@ impl Arm64Backend {
     pub fn write_asm(
         &self,
         path: impl Into<PathBuf> + std::convert::AsRef<std::path::Path>,
-        result_temp: Temp
+        result_temp: Temp,
     ) -> Result<(), BackendError> {
         let path = path.as_ref();
 
@@ -69,19 +69,25 @@ impl Arm64Backend {
             })?;
         }
 
-        std::fs::write(path, self.create_asm(result_temp)).map_err(|source| BackendError::WriteAssembly {
-            path: path.to_path_buf(),
-            source,
+        std::fs::write(path, self.create_asm(result_temp)).map_err(|source| {
+            BackendError::WriteAssembly {
+                path: path.to_path_buf(),
+                source,
+            }
         })
     }
 
     pub fn create_asm(&self, result_temp: Temp) -> String {
         format!(
-            ".text\n.globl _main\n.p2align 2\n_main:\n{}mov x0, #0\nfmov d0, d{result_temp}\nret\n.section __TEXT,__const\n{}", //i need to fmov d0, d{final_destination}
+            ".text\n.globl _main\n.p2align 2\n_main:\n{}mov x0, #0\nfmov d0, d{result_temp}\nret\n.section __TEXT,__const\n{}",
             self.asm, self.literal_pool,
         )
+        /*
+        write into terminal :
+        clang {name of .s file} -o {name of file}
+        ./{name of file}
+        */
     }
-
 
     fn emit_instruction(
         &mut self,
@@ -187,6 +193,7 @@ pub mod tests {
 
     use crate::{Arm64Backend, BackendError};
     use ir::{Expr::Number, Operator::Addition, Program};
+    use std::process::Command;
     use syntax::{Expr, Operator};
 
     #[test]
@@ -196,12 +203,12 @@ pub mod tests {
             asm: String::new(),
             literal_pool: String::new(),
         };
-        
+
         let expr = Box::new(Number(5.0));
         let result_temp = program.generate_ir(&expr).unwrap();
         backend.generate(&program).unwrap();
 
-        assert_eq!(result_temp,0);
+        assert_eq!(result_temp, 0);
 
         assert_eq!(
             backend.asm,
@@ -332,7 +339,7 @@ pub mod tests {
         );
     }
     #[test]
-    fn simple_asm_code_generation() -> Result<(), BackendError> {
+    fn simple_asm_code_generation_macos() -> Result<(), BackendError> {
         let mut program = Program::new();
         let expr = Box::new(Number(5.0));
 
@@ -355,11 +362,19 @@ pub mod tests {
                 .create_asm(result_temp)
                 .starts_with(".text\n.globl _main\n.p2align 2\n_main:\n")
         );
-        backend.generate_to_file(
-            &program,
-            "target/aarch64-apple-darwin/debug/asm/expression.s",
-            result_temp,
-        )?;
+        let assembly_path = "target/aarch64-apple-darwin/debug/asm/simple_test.s";
+        let executable_path = "target/aarch64-apple-darwin/debug/asm/test_simple";
+        backend.generate_to_file(&program, assembly_path, result_temp)?;
+
+        let output = Command::new("clang")
+            .args([assembly_path, "-o", executable_path])
+            .output()
+            .expect("failed to run clang");
+        assert!(
+            output.status.success(),
+            "clang failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         Ok(())
     }
@@ -386,14 +401,66 @@ pub mod tests {
             backend.asm,
             "adrp x16, Lconst0@PAGE\nldr d0, [x16, Lconst0@PAGEOFF]\nadrp x16, Lconst1@PAGE\nldr d1, [x16, Lconst1@PAGEOFF]\nfadd d2, d0, d1\n"
         );
-        backend.generate_to_file(
-            &program,
-            "target/aarch64-apple-darwin/debug/asm/expression.s",
-            result_temp
-        )?;
+        let assembly_path = "target/aarch64-apple-darwin/debug/asm/simple_addition_test.s";
+        let executable_path = "target/aarch64-apple-darwin/debug/asm/test_simple_addition";
+        backend.generate_to_file(&program, assembly_path, result_temp)?;
+
+        let output = Command::new("clang")
+            .args([assembly_path, "-o", executable_path])
+            .output()
+            .expect("failed to run clang");
+        assert!(
+            output.status.success(),
+            "clang failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         Ok(())
     }
+    #[test]
+    fn addition_multiplication_asm_code_generation_macos() -> Result<(), BackendError> {
+        let mut program = Program::new();
+        let mut backend = Arm64Backend {
+            asm: String::new(),
+            literal_pool: String::new(),
+        };
+
+        let expr = Expr::Binary {
+            left: Box::new(Expr::Binary {
+                left: Box::new(Expr::Number(5.0)),
+                operator: Operator::Multiplication,
+                right: Box::new(Expr::Number(3.0)),
+            }),
+            operator: Operator::Addition,
+            right: Box::new(Expr::Number(4.0)),
+        };
+        let result_temp = program.generate_ir(&expr).unwrap();
+        assert_eq!(result_temp, 4);
+
+        backend.generate(&program).unwrap();
+
+        assert_eq!(
+            backend.asm,
+            "adrp x16, Lconst0@PAGE\nldr d0, [x16, Lconst0@PAGEOFF]\nadrp x16, Lconst1@PAGE\nldr d1, [x16, Lconst1@PAGEOFF]\nfmul d2, d0, d1\nadrp x16, Lconst3@PAGE\nldr d3, [x16, Lconst3@PAGEOFF]\nfadd d4, d2, d3\n"
+        );
+
+        let assembly_path = "target/aarch64-apple-darwin/debug/asm/simple_multadd_test.s";
+        let executable_path = "target/aarch64-apple-darwin/debug/asm/test_simple_multadd";
+        backend.generate_to_file(&program, assembly_path, result_temp)?;
+
+        let output = Command::new("clang")
+            .args([assembly_path, "-o", executable_path])
+            .output()
+            .expect("failed to run clang");
+        assert!(
+            output.status.success(),
+            "clang failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        Ok(())
+    }
+
     #[test]
     fn simple_addition_asm_code_generation_linux() -> Result<(), BackendError> {
         let mut program = Program::new();
@@ -420,7 +487,7 @@ pub mod tests {
         backend.generate_to_file(
             &program,
             "target/aarch64-unknown-linux-gnu/debug/asm/expression.s",
-            result_temp
+            result_temp,
         )?;
 
         Ok(())
