@@ -27,7 +27,6 @@ pub enum BackendError {
         source: std::io::Error,
     },
 }
-
 struct Arm64Backend {
     asm: String,
     literal_pool: String,
@@ -82,11 +81,6 @@ impl Arm64Backend {
             ".text\n.globl _main\n.p2align 2\n_main:\n{}mov x0, #0\nfmov d0, d{result_temp}\nret\n.section __TEXT,__const\n{}",
             self.asm, self.literal_pool,
         )
-        /*
-        write into terminal :
-        clang {name of .s file} -o {name of file}
-        ./{name of file}
-        */
     }
 
     fn emit_instruction(
