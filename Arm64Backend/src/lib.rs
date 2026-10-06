@@ -332,6 +332,35 @@ pub mod tests {
             "adrp x16, Lconst0@PAGE\nldr d0, [x16, Lconst0@PAGEOFF]\nadrp x16, Lconst1@PAGE\nldr d1, [x16, Lconst1@PAGEOFF]\nfmul d2, d0, d1\nadrp x16, Lconst3@PAGE\nldr d3, [x16, Lconst3@PAGEOFF]\nfadd d4, d2, d3\n"
         );
     }
+
+    #[test]
+    fn multiplication_addition_emits_arm_code_brackets() {
+        let mut program = Program::new();
+        let mut backend = Arm64Backend {
+            asm: String::new(),
+            literal_pool: String::new(),
+        };
+
+        let expr = Expr::Binary {
+            left: Box::new(Expr::Binary {
+                left: Box::new(Expr::Number(5.0)),
+                operator: Operator::Addition,
+                right: Box::new(Expr::Number(3.0)),
+            }),
+            operator: Operator::Multiplication,
+            right: Box::new(Expr::Number(4.0)),
+        };
+        let result = program.generate_ir(&expr);
+        assert_eq!(result, Ok(4));
+
+        backend.generate(&program).unwrap();
+
+        assert_eq!(
+            backend.asm,
+            "adrp x16, Lconst0@PAGE\nldr d0, [x16, Lconst0@PAGEOFF]\nadrp x16, Lconst1@PAGE\nldr d1, [x16, Lconst1@PAGEOFF]\nfadd d2, d0, d1\nadrp x16, Lconst3@PAGE\nldr d3, [x16, Lconst3@PAGEOFF]\nfmul d4, d2, d3\n"
+        );
+    }
+
     #[test]
     fn simple_asm_code_generation_macos() -> Result<(), BackendError> {
         let mut program = Program::new();
