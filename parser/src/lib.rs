@@ -16,12 +16,21 @@ impl Parser {
     }
 
     fn parse_factor(&mut self) -> Result<Expr, CalculatorError> {
-        // This is for numbers
-        let token = self.tokens.get(self.position).clone();
-        match token {
+        match self.peek().cloned() {
             Some(Token::Number(value)) => {
                 self.position += 1;
-                Ok(Expr::Number(*value))
+                Ok(Expr::Number(value))
+            }
+            Some(Token::LeftParen) => {
+                self.position += 1;
+                let inner = self.parse_expression()?;
+                match self.peek() {
+                    Some(Token::RightParen) => {
+                        self.position += 1;
+                        Ok(inner)
+                    }
+                    _ => Err(ParseError),
+                }
             }
             _ => Err(ParseError),
         }
@@ -31,14 +40,18 @@ impl Parser {
         self.tokens.get(self.position)
     }
 
+    fn parse_brack(&mut self) -> Result<Expr, CalculatorError> {
+        self.parse_factor()
+    }
+
     fn parse_term(&mut self) -> Result<Expr, CalculatorError> {
         // This is for multiplication and division
-        let mut left = self.parse_factor()?;
+        let mut left = self.parse_brack()?;
         loop {
             match self.peek() {
                 Some(Token::Star) => {
                     self.position += 1;
-                    let right = self.parse_factor()?;
+                    let right = self.parse_brack()?;
                     left = Expr::Binary {
                         left: Box::new(left),
                         operator: Operator::Multiplication,
@@ -47,7 +60,7 @@ impl Parser {
                 }
                 Some(Token::Slash) => {
                     self.position += 1;
-                    let right = self.parse_factor()?;
+                    let right = self.parse_brack()?;
                     left = Expr::Binary {
                         left: Box::new(left),
                         operator: Operator::Division,
@@ -169,6 +182,17 @@ pub mod tests {
                 right: Box::new(Expr::Number(4.0))
             })
         );
+    }
+
+    #[test]
+    fn brackets() {
+        let tokens = vec![Token::LeftParen, Token::Number(3.0), Token::RightParen];
+
+        let mut parser = Parser::new(tokens);
+
+        let result = parser.parse_expression();
+
+        assert_eq!(result, Ok(Expr::Number(3.0)));
     }
 
     #[test]
@@ -315,6 +339,36 @@ pub mod tests {
                     operator: Operator::Multiplication,
                     right: Box::new(Expr::Number(4.0))
                 })
+            })
+        );
+    }
+
+    #[test]
+    fn brackets_multi_number_test() {
+        let tokens = vec![
+            Token::LeftParen,
+            Token::Number(3.0),
+            Token::Plus,
+            Token::Number(5.0),
+            Token::RightParen,
+            Token::Star,
+            Token::Number(4.0),
+        ]; // (3.0 + 5.0) * 4.0
+
+        let mut parser = Parser::new(tokens);
+
+        let result = parser.parse_expression();
+
+        assert_eq!(
+            result,
+            Ok(Expr::Binary {
+                left: Box::new(Expr::Binary {
+                    left: Box::new(Expr::Number(3.0)),
+                    operator: Operator::Addition,
+                    right: Box::new(Expr::Number(5.0))
+                }),
+                operator: Operator::Multiplication,
+                right: Box::new(Expr::Number(4.0))
             })
         );
     }

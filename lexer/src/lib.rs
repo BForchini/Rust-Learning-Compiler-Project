@@ -17,11 +17,9 @@ fn tokenize(trimmed: &str) -> Result<Vec<Token>, CalculatorError> {
             current_number.push(c);
         } else if let Some(oper) = parse_operator(c) {
             if !current_number.is_empty() {
-                let value = current_number.parse::<f64>()?;
-                tokens.push(Token::Number(value));
-                current_number = String::new();
-                tokens.push(oper);
+                push_number(&mut current_number, &mut tokens)?;
             }
+            tokens.push(oper);
         } else if !c.is_whitespace() {
             return Err(CalculatorError::InputInvalid);
         }
@@ -40,6 +38,8 @@ fn parse_operator(c: char) -> Option<Token> {
         '-' => Some(Token::Minus),
         '*' => Some(Token::Star),
         '/' => Some(Token::Slash),
+        '(' => Some(Token::LeftParen),
+        ')' => Some(Token::RightParen),
         _ => None,
     }
 }
@@ -61,7 +61,7 @@ fn push_number(
 pub mod tests {
 
     use super::*;
-    use syntax::Token::{Minus, Number, Plus, Star};
+    use syntax::Token::{LeftParen, Minus, Number, Plus, RightParen, Star};
 
     #[test]
     fn no_white_space() {
@@ -83,6 +83,17 @@ pub mod tests {
         let tokens = result.unwrap();
 
         assert_eq!(tokens, vec![Number(3.0), Plus, Number(5.0)]);
+    }
+
+    #[test]
+    fn brackets() {
+        let result = lex("(3)");
+
+        assert!(result.is_ok());
+
+        let tokens = result.unwrap();
+
+        assert_eq!(tokens, vec![LeftParen, Number(3.0), RightParen])
     }
 
     #[test]

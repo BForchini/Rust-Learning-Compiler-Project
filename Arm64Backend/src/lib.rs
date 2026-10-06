@@ -454,7 +454,6 @@ pub mod tests {
 
         Ok(())
     }
-
     #[test]
     fn simple_addition_asm_code_generation_linux() -> Result<(), BackendError> {
         let mut program = Program::new();

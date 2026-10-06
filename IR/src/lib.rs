@@ -189,4 +189,50 @@ mod test {
             ]
         );
     }
+    #[test]
+    fn bracket_testing() {
+        let expr = Expr::Binary {
+            left: Box::new(Number(5.0)),
+            operator: Multiplication,
+            right: Box::new(Expr::Binary {
+                left: Box::new(Number(3.0)),
+                operator: Addition,
+                right: Box::new(Number(2.0)),
+            }),
+        };
+
+        let mut program = Program::new();
+
+        let result = program.generate_ir(&expr);
+
+        assert!(result.is_ok());
+
+        assert_eq!(
+            program.instructions,
+            vec![
+                Instructions::LoadConstant {
+                    value: 5.0,
+                    destination: 0
+                },
+                Instructions::LoadConstant {
+                    value: 3.0,
+                    destination: 1
+                },
+                Instructions::LoadConstant {
+                    value: 2.0,
+                    destination: 2
+                },
+                Instructions::Add {
+                    left: 1,
+                    right: 2,
+                    destination: 3
+                },
+                Instructions::Multiply {
+                    left: 0,
+                    right: 3,
+                    destination: 4
+                },
+            ]
+        );
+    }
 }
