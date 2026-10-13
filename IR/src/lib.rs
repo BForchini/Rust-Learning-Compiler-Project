@@ -45,7 +45,7 @@ impl Program {
                 let destination = self.new_temp();
                 self.instructions.push(Instructions::LoadConstant {
                     value: *value,
-                    destination: destination,
+                    destination,
                 }); //need to emit this to ir
                 Ok(destination)
             }
