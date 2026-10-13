@@ -21,6 +21,30 @@ impl Parser {
                 self.position += 1;
                 Ok(Expr::Number(value))
             }
+            Some(Token::Identifier(name)) => {
+                self.position += 1;
+                if self.peek() == Some(&Token::LeftParen) {
+                    self.position += 1;
+                    let mut arguments = Vec::new();
+                    if self.peek() != Some(&Token::RightParen) {
+                        loop {
+                            arguments.push(self.parse_expression()?);
+                            if self.peek() == Some(&Token::Comma) {
+                                self.position += 1;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                    if self.peek() != Some(&Token::RightParen) {
+                        return Err(ParseError);
+                    }
+                    self.position += 1;
+                    Ok(Expr::FunctionCall { name, arguments })
+                } else {
+                    Ok(Expr::Variable(name))
+                }
+            }
             Some(Token::LeftParen) => {
                 self.position += 1;
                 let inner = self.parse_expression()?;
@@ -73,7 +97,19 @@ impl Parser {
         Ok(left)
     }
 
-    fn parse_expression(&mut self) -> Result<Expr, CalculatorError> {
+    pub fn parse_expression(&mut self) -> Result<Expr, CalculatorError> {
+        if let (Some(Token::Identifier(name)), Some(Token::Equals)) = (
+            self.peek(),
+            self.tokens.get(self.position.saturating_add(1)),
+        ) {
+            let name = name.clone();
+            self.position += 2;
+            return Ok(Expr::Assignment {
+                name,
+                value: Box::new(self.parse_expression()?),
+            });
+        }
+
         // This is for addition and subtraction
         let mut left = self.parse_term()?;
         loop {
@@ -101,6 +137,93 @@ impl Parser {
         }
         Ok(left)
     }
+
+    pub fn parse(&mut self) -> Result<Expr, CalculatorError> {
+        let expression = self.parse_expression()?;
+        if self.peek().is_some() {
+            return Err(ParseError);
+        }
+        Ok(expression)
+    }
+
+    fn parse_function_definition(&mut self) -> Result<syntax::FunctionDefinition, CalculatorError> {
+        if self.peek() != Some(&Token::Fn) {
+            return Err(ParseError);
+        }
+        self.position += 1;
+        let Some(Token::Identifier(name)) = self.peek().cloned() else {
+            return Err(ParseError);
+        };
+        self.position += 1;
+        if self.peek() != Some(&Token::LeftParen) {
+            return Err(ParseError);
+        }
+        self.position += 1;
+
+        let mut parameters = Vec::new();
+        if self.peek() != Some(&Token::RightParen) {
+            loop {
+                let Some(Token::Identifier(parameter)) = self.peek().cloned() else {
+                    return Err(ParseError);
+                };
+                if parameters.contains(&parameter) {
+                    return Err(ParseError);
+                }
+                parameters.push(parameter);
+                self.position += 1;
+                if self.peek() == Some(&Token::Comma) {
+                    self.position += 1;
+                } else {
+                    break;
+                }
+            }
+        }
+        if self.peek() != Some(&Token::RightParen) {
+            return Err(ParseError);
+        }
+        self.position += 1;
+        if self.peek() != Some(&Token::Equals) {
+            return Err(ParseError);
+        }
+        self.position += 1;
+        let body = self.parse_expression()?;
+        if self.peek() != Some(&Token::Semicolon) {
+            return Err(ParseError);
+        }
+        self.position += 1;
+
+        Ok(syntax::FunctionDefinition {
+            name,
+            parameters,
+            body,
+        })
+    }
+
+    pub fn parse_program(&mut self) -> Result<syntax::SourceProgram, CalculatorError> {
+        let mut functions = Vec::new();
+        while self.peek() == Some(&Token::Fn) {
+            let function = self.parse_function_definition()?;
+            if function.name == "main" {
+                return Err(CalculatorError::ReservedFunctionName(function.name));
+            }
+            if functions
+                .iter()
+                .any(|defined: &syntax::FunctionDefinition| defined.name == function.name)
+            {
+                return Err(CalculatorError::DuplicateFunction(function.name));
+            }
+            functions.push(function);
+        }
+
+        let expression = self.parse_expression()?;
+        if self.peek().is_some() {
+            return Err(ParseError);
+        }
+        Ok(syntax::SourceProgram {
+            functions,
+            expression,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -111,7 +234,7 @@ pub mod tests {
     use syntax::{
         CalculatorError::ParseError,
         Expr::{self, Number},
-        Operator, Token,
+        FunctionDefinition, Operator, SourceProgram, Token,
     };
 
     use crate::Parser;
@@ -125,6 +248,94 @@ pub mod tests {
         let result = parser.parse_factor();
 
         assert_eq!(result, Ok(Expr::Number(3.0)));
+    }
+
+    #[test]
+    fn assignment_expression() {
+        let mut parser = Parser::new(vec![
+            Token::Identifier("x".into()),
+            Token::Equals,
+            Token::Number(4.0),
+            Token::Plus,
+            Token::Number(3.0),
+        ]);
+
+        assert_eq!(
+            parser.parse(),
+            Ok(Expr::Assignment {
+                name: "x".into(),
+                value: Box::new(Expr::Binary {
+                    left: Box::new(Number(4.0)),
+                    operator: Operator::Addition,
+                    right: Box::new(Number(3.0)),
+                }),
+            })
+        );
+    }
+
+    #[test]
+    fn parses_functions_and_nested_calls() {
+        let tokens = vec![
+            Token::Fn,
+            Token::Identifier("add".into()),
+            Token::LeftParen,
+            Token::Identifier("a".into()),
+            Token::Comma,
+            Token::Identifier("b".into()),
+            Token::RightParen,
+            Token::Equals,
+            Token::Identifier("a".into()),
+            Token::Plus,
+            Token::Identifier("b".into()),
+            Token::Semicolon,
+            Token::Fn,
+            Token::Identifier("twice".into()),
+            Token::LeftParen,
+            Token::Identifier("x".into()),
+            Token::RightParen,
+            Token::Equals,
+            Token::Identifier("add".into()),
+            Token::LeftParen,
+            Token::Identifier("x".into()),
+            Token::Comma,
+            Token::Identifier("x".into()),
+            Token::RightParen,
+            Token::Semicolon,
+            Token::Identifier("twice".into()),
+            Token::LeftParen,
+            Token::Number(4.0),
+            Token::RightParen,
+        ];
+        let mut parser = Parser::new(tokens);
+
+        assert_eq!(
+            parser.parse_program(),
+            Ok(SourceProgram {
+                functions: vec![
+                    FunctionDefinition {
+                        name: "add".into(),
+                        parameters: vec!["a".into(), "b".into()],
+                        body: Expr::Binary {
+                            left: Box::new(Expr::Variable("a".into())),
+                            operator: Operator::Addition,
+                            right: Box::new(Expr::Variable("b".into())),
+                        },
+                    },
+                    FunctionDefinition {
+                        name: "twice".into(),
+                        parameters: vec!["x".into()],
+                        body: Expr::FunctionCall {
+                            name: "add".into(),
+                            arguments: vec![Expr::Variable("x".into()), Expr::Variable("x".into()),],
+                        },
+                    },
+                ],
+                expression: Expr::FunctionCall {
+                    name: "twice".into(),
+                    arguments: vec![Number(4.0)],
+                },
+            })
+        );
     }
 
     #[test]

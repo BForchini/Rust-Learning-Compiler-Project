@@ -1,4 +1,4 @@
-use ir::Program;
+use ir::{FunctionIr, Program};
 use std::path::PathBuf;
 use syntax::{Instructions, Temp};
 use thiserror::Error;
@@ -13,6 +13,15 @@ pub enum BackendError {
         instruction_index: usize,
         instruction: Instructions,
     },
+    #[error("invalid floating-point argument index {index} at instruction {instruction_index}")]
+    InvalidArgument {
+        index: usize,
+        instruction_index: usize,
+    },
+    #[error(
+        "function {name} has {actual} arguments; ARM64 supports at most 8 floating-point arguments"
+    )]
+    TooManyArguments { name: String, actual: usize },
     #[error("Failed to write assembly to {path}: {source}")]
     CreateDirectory {
         path: PathBuf,
@@ -27,18 +36,34 @@ pub enum BackendError {
         source: std::io::Error,
     },
 }
-struct Arm64Backend {
+pub struct Arm64Backend {
     asm: String,
+    function_asm: String,
     literal_pool: String,
+    current_function: Option<String>,
 }
 
 impl Arm64Backend {
+    pub fn new() -> Self {
+        Self {
+            asm: String::new(),
+            function_asm: String::new(),
+            literal_pool: String::new(),
+            current_function: None,
+        }
+    }
+
     pub fn generate(&mut self, program: &Program) -> Result<(), BackendError> {
         self.asm.clear();
+        self.function_asm.clear();
         self.literal_pool.clear();
+        self.current_function = None;
 
         for (instruction_index, instruction) in program.instructions.iter().enumerate() {
             self.emit_instruction(instruction_index, instruction)?;
+        }
+        for function in &program.functions {
+            self.emit_function(function)?;
         }
 
         Ok(())
@@ -78,9 +103,34 @@ impl Arm64Backend {
 
     pub fn create_asm(&self, result_temp: Temp) -> String {
         format!(
-            ".text\n.globl _main\n.p2align 2\n_main:\n{}mov x0, #0\nfmov d0, d{result_temp}\nret\n.section __TEXT,__const\n{}",
-            self.asm, self.literal_pool,
+            ".text\n.globl _main\n.p2align 2\n_main:\nstp x29, x30, [sp, #-80]!\nstr d8, [sp, #16]\nstr d9, [sp, #24]\nstr d10, [sp, #32]\nstr d11, [sp, #40]\nstr d12, [sp, #48]\nstr d13, [sp, #56]\nstr d14, [sp, #64]\nstr d15, [sp, #72]\nmov x29, sp\n{}mov x0, #0\nfmov d0, d{result_temp}\nldr d8, [sp, #16]\nldr d9, [sp, #24]\nldr d10, [sp, #32]\nldr d11, [sp, #40]\nldr d12, [sp, #48]\nldr d13, [sp, #56]\nldr d14, [sp, #64]\nldr d15, [sp, #72]\nldp x29, x30, [sp], #80\nret\n{}\n.section __TEXT,__const\n{}",
+            self.asm, self.function_asm, self.literal_pool,
         )
+    }
+
+    fn emit_function(&mut self, function: &FunctionIr) -> Result<(), BackendError> {
+        let previous_asm = std::mem::take(&mut self.asm);
+        self.current_function = Some(function.name.clone());
+        self.asm.push_str(&format!(
+            ".globl _{name}\n.p2align 2\n_{name}:\nstp x29, x30, [sp, #-80]!\nstr d8, [sp, #16]\nstr d9, [sp, #24]\nstr d10, [sp, #32]\nstr d11, [sp, #40]\nstr d12, [sp, #48]\nstr d13, [sp, #56]\nstr d14, [sp, #64]\nstr d15, [sp, #72]\nmov x29, sp\n",
+            name = function.name
+        ));
+
+        for (instruction_index, instruction) in function.instructions.iter().enumerate() {
+            if let Err(error) = self.emit_instruction(instruction_index, instruction) {
+                self.current_function = None;
+                self.asm = previous_asm;
+                return Err(error);
+            }
+        }
+        self.asm.push_str(&format!(
+            "fmov d0, d{}\nldr d8, [sp, #16]\nldr d9, [sp, #24]\nldr d10, [sp, #32]\nldr d11, [sp, #40]\nldr d12, [sp, #48]\nldr d13, [sp, #56]\nldr d14, [sp, #64]\nldr d15, [sp, #72]\nldp x29, x30, [sp], #80\nret\n",
+            function.result_temp
+        ));
+        self.function_asm.push_str(&self.asm);
+        self.current_function = None;
+        self.asm = previous_asm;
+        Ok(())
     }
 
     fn emit_instruction(
@@ -89,7 +139,8 @@ impl Arm64Backend {
         instruction: &Instructions,
     ) -> Result<(), BackendError> {
         let temps = match instruction {
-            Instructions::LoadConstant { destination, .. } => vec![*destination],
+            Instructions::LoadArgument { destination, .. }
+            | Instructions::LoadConstant { destination, .. } => vec![*destination],
             Instructions::Add {
                 left,
                 right,
@@ -110,6 +161,15 @@ impl Arm64Backend {
                 right,
                 destination,
             } => vec![*left, *right, *destination],
+            Instructions::Call {
+                arguments,
+                destination,
+                ..
+            } => arguments
+                .iter()
+                .copied()
+                .chain(std::iter::once(*destination))
+                .collect(),
         };
 
         for temp in temps {
@@ -117,12 +177,22 @@ impl Arm64Backend {
                 return Err(BackendError::InvalidTemp {
                     temp,
                     instruction_index,
-                    instruction: *instruction,
+                    instruction: instruction.clone(),
                 });
             }
         }
 
         match instruction {
+            Instructions::LoadArgument { index, destination } => {
+                if *index >= 8 {
+                    return Err(BackendError::InvalidArgument {
+                        index: *index,
+                        instruction_index,
+                    });
+                }
+                self.asm
+                    .push_str(&format!("fmov d{destination}, d{index}\n"));
+            }
             Instructions::LoadConstant { value, destination } => {
                 self.emit_load_constant(*value, *destination)
             }
@@ -146,6 +216,11 @@ impl Arm64Backend {
                 right,
                 destination,
             } => self.emit_div(*left, *right, *destination),
+            Instructions::Call {
+                name,
+                arguments,
+                destination,
+            } => self.emit_call(name, arguments, *destination)?,
         }
 
         Ok(())
@@ -153,12 +228,49 @@ impl Arm64Backend {
 
     fn emit_load_constant(&mut self, value: f64, destination: Temp) {
         let bits: u64 = value.to_bits();
+        let label = match &self.current_function {
+            Some(function) => format!("L{function}_const{destination}"),
+            None => format!("Lconst{destination}"),
+        };
         self.asm.push_str(&format!(
-            "adrp x16, Lconst{destination}@PAGE\nldr d{destination}, [x16, Lconst{destination}@PAGEOFF]\n"
+            "adrp x16, {label}@PAGE\nldr d{destination}, [x16, {label}@PAGEOFF]\n"
         ));
-        self.literal_pool.push_str(&format!(
-            ".p2align 3\nLconst{destination}:\n.quad 0x{bits:016X}\n"
+        self.literal_pool
+            .push_str(&format!(".p2align 3\n{label}:\n.quad 0x{bits:016X}\n"));
+    }
+
+    fn emit_call(
+        &mut self,
+        name: &str,
+        arguments: &[Temp],
+        destination: Temp,
+    ) -> Result<(), BackendError> {
+        if arguments.len() > 8 {
+            return Err(BackendError::TooManyArguments {
+                name: name.to_owned(),
+                actual: arguments.len(),
+            });
+        }
+
+        self.asm.push_str("sub sp, sp, #272\n");
+        for register in 0..32 {
+            self.asm
+                .push_str(&format!("str d{register}, [sp, #{}]\n", register * 8));
+        }
+        for (index, argument) in arguments.iter().enumerate() {
+            self.asm
+                .push_str(&format!("ldr d{index}, [sp, #{}]\n", argument * 8));
+        }
+        self.asm.push_str(&format!("bl _{name}\n"));
+        self.asm.push_str("str d0, [sp, #256]\n");
+        for register in 0..32 {
+            self.asm
+                .push_str(&format!("ldr d{register}, [sp, #{}]\n", register * 8));
+        }
+        self.asm.push_str(&format!(
+            "ldr d{destination}, [sp, #256]\nadd sp, sp, #272\n"
         ));
+        Ok(())
     }
 
     fn emit_add(&mut self, left: Temp, right: Temp, destination: Temp) {
@@ -188,15 +300,12 @@ pub mod tests {
     use crate::{Arm64Backend, BackendError};
     use ir::{Expr::Number, Operator::Addition, Program};
     use std::process::Command;
-    use syntax::{Expr, Operator};
+    use syntax::{Expr, FunctionDefinition, Operator, SourceProgram};
 
     #[test]
     fn simple_emit_constant_code() {
         let mut program = Program::new();
-        let mut backend = Arm64Backend {
-            asm: String::new(),
-            literal_pool: String::new(),
-        };
+        let mut backend = Arm64Backend::new();
 
         let expr = Box::new(Number(5.0));
         let result_temp = program.generate_ir(&expr).unwrap();
@@ -212,10 +321,7 @@ pub mod tests {
     #[test]
     fn addition_emits_arm_code() {
         let mut program = Program::new();
-        let mut backend = Arm64Backend {
-            asm: String::new(),
-            literal_pool: String::new(),
-        };
+        let mut backend = Arm64Backend::new();
 
         let expr = Expr::Binary {
             left: Box::new(Expr::Number(5.0)),
@@ -233,13 +339,74 @@ pub mod tests {
             "adrp x16, Lconst0@PAGE\nldr d0, [x16, Lconst0@PAGEOFF]\nadrp x16, Lconst1@PAGE\nldr d1, [x16, Lconst1@PAGEOFF]\nfadd d2, d0, d1\n"
         );
     }
+
+    #[test]
+    fn variable_assignment_emits_initializer_code() {
+        let mut program = Program::new();
+        let mut backend = Arm64Backend::new();
+        let expr = Expr::Assignment {
+            name: "x".into(),
+            value: Box::new(Expr::Binary {
+                left: Box::new(Expr::Number(4.0)),
+                operator: Operator::Addition,
+                right: Box::new(Expr::Number(3.0)),
+            }),
+        };
+
+        let result_temp = program.generate_ir(&expr).unwrap();
+        assert_eq!(result_temp, 2);
+        backend.generate(&program).unwrap();
+
+        assert_eq!(
+            backend.asm,
+            "adrp x16, Lconst0@PAGE\nldr d0, [x16, Lconst0@PAGEOFF]\nadrp x16, Lconst1@PAGE\nldr d1, [x16, Lconst1@PAGEOFF]\nfadd d2, d0, d1\n"
+        );
+    }
+
+    #[test]
+    fn nested_function_calls_emit_arm64_calls() {
+        let source = SourceProgram {
+            functions: vec![
+                FunctionDefinition {
+                    name: "add".into(),
+                    parameters: vec!["a".into(), "b".into()],
+                    body: Expr::Binary {
+                        left: Box::new(Expr::Variable("a".into())),
+                        operator: Operator::Addition,
+                        right: Box::new(Expr::Variable("b".into())),
+                    },
+                },
+                FunctionDefinition {
+                    name: "twice".into(),
+                    parameters: vec!["x".into()],
+                    body: Expr::FunctionCall {
+                        name: "add".into(),
+                        arguments: vec![Expr::Variable("x".into()), Expr::Variable("x".into())],
+                    },
+                },
+            ],
+            expression: Expr::FunctionCall {
+                name: "twice".into(),
+                arguments: vec![Expr::Number(4.0)],
+            },
+        };
+        let mut program = Program::new();
+        let result_temp = program.generate_program_ir(&source).unwrap();
+        let mut backend = Arm64Backend::new();
+
+        backend.generate(&program).unwrap();
+        let assembly = backend.create_asm(result_temp);
+
+        assert!(assembly.contains("bl _twice\n"));
+        assert!(assembly.contains("_add:\n"));
+        assert!(assembly.contains("_twice:\n"));
+        assert!(assembly.contains("bl _add\n"));
+        assert!(assembly.contains("fmov d0, d"));
+    }
     #[test]
     fn subtraction_emits_arm_code() {
         let mut program = Program::new();
-        let mut backend = Arm64Backend {
-            asm: String::new(),
-            literal_pool: String::new(),
-        };
+        let mut backend = Arm64Backend::new();
 
         let expr = Expr::Binary {
             left: Box::new(Expr::Number(5.0)),
@@ -260,10 +427,7 @@ pub mod tests {
     #[test]
     fn multiplication_emits_arm_code() {
         let mut program = Program::new();
-        let mut backend = Arm64Backend {
-            asm: String::new(),
-            literal_pool: String::new(),
-        };
+        let mut backend = Arm64Backend::new();
 
         let expr = Expr::Binary {
             left: Box::new(Expr::Number(5.0)),
@@ -284,10 +448,7 @@ pub mod tests {
     #[test]
     fn division_emits_arm_code() {
         let mut program = Program::new();
-        let mut backend = Arm64Backend {
-            asm: String::new(),
-            literal_pool: String::new(),
-        };
+        let mut backend = Arm64Backend::new();
 
         let expr = Expr::Binary {
             left: Box::new(Expr::Number(5.0)),
@@ -308,10 +469,7 @@ pub mod tests {
     #[test]
     fn addition_multiplication_emits_arm_code() {
         let mut program = Program::new();
-        let mut backend = Arm64Backend {
-            asm: String::new(),
-            literal_pool: String::new(),
-        };
+        let mut backend = Arm64Backend::new();
 
         let expr = Expr::Binary {
             left: Box::new(Expr::Binary {
@@ -336,10 +494,7 @@ pub mod tests {
     #[test]
     fn multiplication_addition_emits_arm_code_brackets() {
         let mut program = Program::new();
-        let mut backend = Arm64Backend {
-            asm: String::new(),
-            literal_pool: String::new(),
-        };
+        let mut backend = Arm64Backend::new();
 
         let expr = Expr::Binary {
             left: Box::new(Expr::Binary {
@@ -366,10 +521,7 @@ pub mod tests {
         let mut program = Program::new();
         let expr = Box::new(Number(5.0));
 
-        let mut backend = Arm64Backend {
-            asm: String::new(),
-            literal_pool: String::new(),
-        };
+        let mut backend = Arm64Backend::new();
 
         let result_temp = program.generate_ir(&expr).unwrap();
         assert_eq!(result_temp, 0);
@@ -410,10 +562,7 @@ pub mod tests {
             right: Box::new(Number(3.0)),
         };
 
-        let mut backend = Arm64Backend {
-            asm: String::new(),
-            literal_pool: String::new(),
-        };
+        let mut backend = Arm64Backend::new();
 
         let result_temp = program.generate_ir(&expr).unwrap();
         assert_eq!(result_temp, 2);
@@ -443,10 +592,7 @@ pub mod tests {
     #[test]
     fn addition_multiplication_asm_code_generation_macos() -> Result<(), BackendError> {
         let mut program = Program::new();
-        let mut backend = Arm64Backend {
-            asm: String::new(),
-            literal_pool: String::new(),
-        };
+        let mut backend = Arm64Backend::new();
 
         let expr = Expr::Binary {
             left: Box::new(Expr::Binary {
@@ -492,10 +638,7 @@ pub mod tests {
             right: Box::new(Number(3.0)),
         };
 
-        let mut backend = Arm64Backend {
-            asm: String::new(),
-            literal_pool: String::new(),
-        };
+        let mut backend = Arm64Backend::new();
 
         let result_temp = program.generate_ir(&expr).unwrap();
         assert_eq!(result_temp, 2);
