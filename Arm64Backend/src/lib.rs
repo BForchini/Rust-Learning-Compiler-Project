@@ -160,6 +160,21 @@ impl Arm64Backend {
                 left,
                 right,
                 destination,
+            }
+            | Instructions::GreaterThan {
+                left,
+                right,
+                destination,
+            }
+            | Instructions::LessThan {
+                left,
+                right,
+                destination,
+            }
+            | Instructions::Equality {
+                left,
+                right,
+                destination,
             } => vec![*left, *right, *destination],
             Instructions::Call {
                 arguments,
@@ -216,6 +231,21 @@ impl Arm64Backend {
                 right,
                 destination,
             } => self.emit_div(*left, *right, *destination),
+            Instructions::GreaterThan {
+                left,
+                right,
+                destination,
+            } => self.emit_compare(*left, *right, *destination, "gt"),
+            Instructions::LessThan {
+                left,
+                right,
+                destination,
+            } => self.emit_compare(*left, *right, *destination, "lt"),
+            Instructions::Equality {
+                left,
+                right,
+                destination,
+            } => self.emit_compare(*left, *right, *destination, "eq"),
             Instructions::Call {
                 name,
                 arguments,
@@ -291,6 +321,15 @@ impl Arm64Backend {
     fn emit_div(&mut self, left: Temp, right: Temp, destination: Temp) {
         self.asm
             .push_str(&format!("fdiv d{destination}, d{left}, d{right}\n"));
+    }
+
+    fn emit_compare(&mut self, left: Temp, right: Temp, destination: Temp, condition: &str) {
+        self.asm
+            .push_str(&format!("fcmp d{left}, d{right}\n"));
+        self.asm
+            .push_str(&format!("cset w16, {condition}\n"));
+        self.asm
+            .push_str(&format!("scvtf d{destination}, w16\n"));
     }
 }
 

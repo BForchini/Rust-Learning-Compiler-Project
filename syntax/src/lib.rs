@@ -3,17 +3,25 @@ use thiserror::Error;
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
     Number(f64),
+    String(String),
     Identifier(String),
     Fn,
-    Equals,     // =
-    Comma,      // ,
-    Semicolon,  // ;
-    Plus,       // +
-    Minus,      // -
-    Star,       // *
-    Slash,      // /
-    LeftParen,  // (
-    RightParen, // )
+    If,
+    Else,
+    For,
+    While,
+    Equals,       // =
+    EqualsEquals, // ==
+    GreaterThan,  // >
+    LessThan,     // <
+    Comma,        // ,
+    Semicolon,    // ;
+    Plus,         // +
+    Minus,        // -
+    Star,         // *
+    Slash,        // /
+    LeftParen,    // (
+    RightParen,   // )
 }
 
 #[derive(Debug, PartialEq, Error)]
@@ -48,6 +56,7 @@ pub enum CalculatorError {
 pub enum Expr {
     // For the parser to recognise order of operations.
     Number(f64),
+    String(String),
     Variable(String),
     Assignment {
         name: String,
@@ -70,6 +79,9 @@ pub enum Operator {
     Subtraction,
     Division,
     Multiplication,
+    GreaterThan,
+    LessThan,
+    Equality,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -113,6 +125,21 @@ pub enum Instructions {
         destination: Temp,
     },
     Divide {
+        left: Temp,
+        right: Temp,
+        destination: Temp,
+    },
+    GreaterThan {
+        left: Temp,
+        right: Temp,
+        destination: Temp,
+    },
+    LessThan {
+        left: Temp,
+        right: Temp,
+        destination: Temp,
+    },
+    Equality {
         left: Temp,
         right: Temp,
         destination: Temp,

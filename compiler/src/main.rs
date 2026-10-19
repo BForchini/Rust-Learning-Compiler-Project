@@ -12,7 +12,68 @@ fn main() {
     }
 }
 
+fn verify_language_features() -> Result<(), Box<dyn Error>> {
+    let tokens = lexer::lex("if x < 5 == 3")?;
+    assert_eq!(
+        tokens,
+        vec![
+            syntax::Token::If,
+            syntax::Token::Identifier("x".to_string()),
+            syntax::Token::LessThan,
+            syntax::Token::Number(5.0),
+            syntax::Token::EqualsEquals,
+            syntax::Token::Number(3.0),
+        ]
+    );
+
+    let comparison_tokens = lexer::lex("x < 5 == 3")?;
+    let mut parser = parser::Parser::new(comparison_tokens);
+    let parsed = parser.parse()?;
+    assert_eq!(
+        parsed,
+        syntax::Expr::Binary {
+            left: Box::new(syntax::Expr::Binary {
+                left: Box::new(syntax::Expr::Variable("x".to_string())),
+                operator: syntax::Operator::LessThan,
+                right: Box::new(syntax::Expr::Number(5.0)),
+            }),
+            operator: syntax::Operator::Equality,
+            right: Box::new(syntax::Expr::Number(3.0)),
+        }
+    );
+
+    let mut evaluator = evaluator::Evaluator::new();
+    evaluator.evaluate(syntax::Expr::Assignment {
+        name: "x".to_string(),
+        value: Box::new(syntax::Expr::Number(4.0)),
+    })?;
+    let comparison = evaluator.evaluate(syntax::Expr::Binary {
+        left: Box::new(syntax::Expr::Binary {
+            left: Box::new(syntax::Expr::Variable("x".to_string())),
+            operator: syntax::Operator::LessThan,
+            right: Box::new(syntax::Expr::Number(5.0)),
+        }),
+        operator: syntax::Operator::Equality,
+        right: Box::new(syntax::Expr::Number(1.0)),
+    })?;
+    assert_eq!(comparison, 1.0);
+
+    let source = "fn is_small(x) = x < 5; is_small(3)";
+    let (result, assembly) = compile_source(source)?;
+    assert_eq!(result, 1.0);
+    assert!(assembly.contains("fcmp d"));
+
+    let (result, assembly) = compile_source("fn add(a, b) = a + b; fn twice(x) = add(x, x); twice(4)")?;
+    assert_eq!(result, 8.0);
+    assert!(assembly.contains("bl _twice\n"));
+    assert!(assembly.contains("bl _add\n"));
+
+    Ok(())
+}
+
 fn run() -> Result<(), Box<dyn Error>> {
+    verify_language_features()?;
+
     let source = "fn add(a, b) = a + b; fn twice(x) = add(x, x); twice(4)";
     let (result, assembly) = compile_source(source)?;
     let output_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../target/compiler-output");
@@ -60,7 +121,7 @@ fn compile_source(source: &str) -> Result<(f64, String), Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
-    use super::compile_source;
+    use super::{compile_source, verify_language_features};
 
     #[test]
     fn compiler_main_wires_nested_function_pipeline() {
@@ -70,5 +131,10 @@ mod tests {
         assert_eq!(result, 8.0);
         assert!(assembly.contains("bl _twice\n"));
         assert!(assembly.contains("bl _add\n"));
+    }
+
+    #[test]
+    fn compiler_verifies_keyword_and_comparison_syntax() {
+        verify_language_features().unwrap();
     }
 }
