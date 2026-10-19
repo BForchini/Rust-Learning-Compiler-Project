@@ -9,42 +9,109 @@ pub fn lex(input: &str) -> Result<Vec<Token>, CalculatorError> {
 }
 
 fn tokenize(trimmed: &str) -> Result<Vec<Token>, CalculatorError> {
-    let mut current_number = String::new();
-    let mut current_identifier = String::new();
+    let mut chars = trimmed.chars().peekable();
     let mut tokens: Vec<Token> = Vec::new();
 
-    for c in trimmed.chars() {
-        if c.is_ascii_alphanumeric() || c == '_' {
-            if !current_identifier.is_empty() || c.is_ascii_alphabetic() || c == '_' {
-                push_number(&mut current_number, &mut tokens)?;
-                current_identifier.push(c);
-            } else {
-                push_identifier(&mut current_identifier, &mut tokens);
-                current_number.push(c);
-            }
-        } else if c.is_numeric() {
-            current_number.push(c);
-        } else if let Some(oper) = parse_operator(c) {
-            push_number(&mut current_number, &mut tokens)?;
-            push_identifier(&mut current_identifier, &mut tokens);
-            tokens.push(oper);
-        } else if c.is_whitespace() {
-            push_number(&mut current_number, &mut tokens)?;
-            push_identifier(&mut current_identifier, &mut tokens);
-        } else {
-            return Err(CalculatorError::InputInvalid);
+    while let Some(c) = chars.next() {
+        if c.is_whitespace() {
+            continue;
         }
-    }
 
-    push_number(&mut current_number, &mut tokens)?;
-    push_identifier(&mut current_identifier, &mut tokens);
+        if c == '"' {
+            let mut value = String::new();
+            loop {
+                let Some(next) = chars.next() else {
+                    return Err(CalculatorError::InputInvalid);
+                };
+
+                if next == '"' {
+                    break;
+                }
+
+                if next == '\\' {
+                    let Some(escaped) = chars.next() else {
+                        return Err(CalculatorError::InputInvalid);
+                    };
+                    match escaped {
+                        '"' | '\\' => value.push(escaped),
+                        'n' => value.push('\n'),
+                        'r' => value.push('\r'),
+                        't' => value.push('\t'),
+                        _ => value.push(escaped),
+                    }
+                    continue;
+                }
+
+                value.push(next);
+            }
+            tokens.push(Token::String(value));
+            continue;
+        }
+
+        if c.is_ascii_digit() {
+            let mut number = String::new();
+            number.push(c);
+            while let Some(&next) = chars.peek() {
+                if next.is_ascii_digit() || next == '.' {
+                    number.push(next);
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+            tokens.push(Token::Number(number.parse::<f64>()?));
+            continue;
+        }
+
+        if c.is_ascii_alphabetic() || c == '_' {
+            let mut identifier = String::new();
+            identifier.push(c);
+            while let Some(&next) = chars.peek() {
+                if next.is_ascii_alphanumeric() || next == '_' {
+                    identifier.push(next);
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+            let token = match identifier.as_str() {
+                "fn" => Token::Fn,
+                "if" => Token::If,
+                "else" => Token::Else,
+                "for" => Token::For,
+                "while" => Token::While,
+                _ => Token::Identifier(identifier),
+            };
+            tokens.push(token);
+            continue;
+        }
+
+        if let Some(oper) = parse_operator(c, &mut chars) {
+            tokens.push(oper);
+            continue;
+        }
+
+        return Err(CalculatorError::InputInvalid);
+    }
 
     Ok(tokens)
 }
 
-fn parse_operator(c: char) -> Option<Token> {
+fn parse_operator(
+    c: char,
+    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
+) -> Option<Token> {
     match c {
-        '=' => Some(Token::Equals),
+        '=' => {
+            if matches!(chars.peek(), Some('=')) {
+                chars.next();
+                Some(Token::EqualsEquals)
+            } else {
+                Some(Token::Equals)
+            }
+        }
+        '>' => Some(Token::GreaterThan),
+        '<' => Some(Token::LessThan),
         ',' => Some(Token::Comma),
         ';' => Some(Token::Semicolon),
         '+' => Some(Token::Plus),
@@ -57,19 +124,7 @@ fn parse_operator(c: char) -> Option<Token> {
     }
 }
 
-fn push_identifier(current_identifier: &mut String, tokens: &mut Vec<Token>) {
-    if !current_identifier.is_empty() {
-        let identifier = std::mem::take(current_identifier);
-        if identifier == "fn" {
-            tokens.push(Token::Fn);
-        } else {
-            tokens.push(Token::Identifier(identifier));
-        }
-    }
-}
-
 fn push_number(
-    //Function is for the final term of the string.
     current_numbers: &mut String,
     tokens: &mut Vec<Token>,
 ) -> Result<(), CalculatorError> {
@@ -86,7 +141,8 @@ pub mod tests {
 
     use super::*;
     use syntax::Token::{
-        Comma, Equals, Fn, Identifier, LeftParen, Minus, Number, Plus, RightParen, Semicolon, Star,
+        Comma, Equals, EqualsEquals, Fn, Identifier, If, LeftParen, LessThan, Minus, Number,
+        Plus, RightParen, Semicolon, Star,
     };
 
     #[test]
@@ -211,5 +267,30 @@ pub mod tests {
         let tokens = result.unwrap();
 
         assert_eq!(tokens, vec![Number(3.0), Minus, Number(2.0)]);
+    }
+
+    #[test]
+    fn keywords_and_boolean_operators() {
+        let result = lex("if x < 5 == 3");
+
+        assert!(result.is_ok());
+
+        let tokens = result.unwrap();
+
+        assert_eq!(
+            tokens,
+            vec![If, Identifier("x".into()), LessThan, Number(5.0), EqualsEquals, Number(3.0)]
+        );
+    }
+
+    #[test]
+    fn strings() {
+        let result = lex("\"hello\"");
+
+        assert!(result.is_ok());
+
+        let tokens = result.unwrap();
+
+        assert_eq!(tokens, vec![Token::String("hello".into())]);
     }
 }

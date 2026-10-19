@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use syntax::{
     CalculatorError, Expr, FunctionDefinition,
-    Operator::{Addition, Division, Multiplication, Subtraction},
+    Operator::{Addition, Division, Equality, GreaterThan, LessThan, Multiplication, Subtraction},
     SourceProgram,
 };
 
@@ -68,9 +68,13 @@ fn evaluate_expr(
                     }
                 }
                 Multiplication => Ok(left_value * right_value),
+                GreaterThan => Ok(if left_value > right_value { 1.0 } else { 0.0 }),
+                LessThan => Ok(if left_value < right_value { 1.0 } else { 0.0 }),
+                Equality => Ok(if left_value == right_value { 1.0 } else { 0.0 }),
             }
         }
         Expr::Number(value) => Ok(*value),
+        Expr::String(_) => Err(CalculatorError::InputInvalid),
         Expr::Variable(name) => variables
             .get(name)
             .copied()

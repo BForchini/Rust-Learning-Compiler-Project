@@ -21,6 +21,10 @@ impl Parser {
                 self.position += 1;
                 Ok(Expr::Number(value))
             }
+            Some(Token::String(value)) => {
+                self.position += 1;
+                Ok(Expr::String(value))
+            }
             Some(Token::Identifier(name)) => {
                 self.position += 1;
                 if self.peek() == Some(&Token::LeftParen) {
@@ -129,6 +133,33 @@ impl Parser {
                     left = Expr::Binary {
                         left: Box::new(left),
                         operator: Operator::Subtraction,
+                        right: Box::new(right),
+                    };
+                }
+                Some(Token::GreaterThan) => {
+                    self.position += 1;
+                    let right = self.parse_term()?;
+                    left = Expr::Binary {
+                        left: Box::new(left),
+                        operator: Operator::GreaterThan,
+                        right: Box::new(right),
+                    };
+                }
+                Some(Token::LessThan) => {
+                    self.position += 1;
+                    let right = self.parse_term()?;
+                    left = Expr::Binary {
+                        left: Box::new(left),
+                        operator: Operator::LessThan,
+                        right: Box::new(right),
+                    };
+                }
+                Some(Token::EqualsEquals) => {
+                    self.position += 1;
+                    let right = self.parse_term()?;
+                    left = Expr::Binary {
+                        left: Box::new(left),
+                        operator: Operator::Equality,
                         right: Box::new(right),
                     };
                 }
@@ -269,6 +300,30 @@ pub mod tests {
                     operator: Operator::Addition,
                     right: Box::new(Number(3.0)),
                 }),
+            })
+        );
+    }
+
+    #[test]
+    fn comparison_expression() {
+        let mut parser = Parser::new(vec![
+            Token::Identifier("x".into()),
+            Token::LessThan,
+            Token::Number(5.0),
+            Token::EqualsEquals,
+            Token::Number(3.0),
+        ]);
+
+        assert_eq!(
+            parser.parse(),
+            Ok(Expr::Binary {
+                left: Box::new(Expr::Binary {
+                    left: Box::new(Expr::Variable("x".into())),
+                    operator: Operator::LessThan,
+                    right: Box::new(Number(5.0)),
+                }),
+                operator: Operator::Equality,
+                right: Box::new(Number(3.0)),
             })
         );
     }

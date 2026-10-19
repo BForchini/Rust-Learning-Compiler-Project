@@ -49,6 +49,7 @@ impl Program {
                 }); //need to emit this to ir
                 Ok(destination)
             }
+            Expr::String(_) => Err(CalculatorError::InputInvalid),
             Expr::Variable(name) => self
                 .variables
                 .get(name)
@@ -122,6 +123,33 @@ impl Program {
                     Operator::Multiplication => {
                         let destination = self.new_temp();
                         self.instructions.push(Instructions::Multiply {
+                            left: left_gen,
+                            right: right_gen,
+                            destination,
+                        });
+                        Ok(destination)
+                    }
+                    Operator::GreaterThan => {
+                        let destination = self.new_temp();
+                        self.instructions.push(Instructions::GreaterThan {
+                            left: left_gen,
+                            right: right_gen,
+                            destination,
+                        });
+                        Ok(destination)
+                    }
+                    Operator::LessThan => {
+                        let destination = self.new_temp();
+                        self.instructions.push(Instructions::LessThan {
+                            left: left_gen,
+                            right: right_gen,
+                            destination,
+                        });
+                        Ok(destination)
+                    }
+                    Operator::Equality => {
+                        let destination = self.new_temp();
+                        self.instructions.push(Instructions::Equality {
                             left: left_gen,
                             right: right_gen,
                             destination,
