@@ -1,4 +1,3 @@
-
 # Rust Compiler Project
 
 A programming language project I started to learn Rust and explore how compilers work.
@@ -41,20 +40,7 @@ The current pipeline is:
 Source → Lexer → Parser → AST → Evaluator / IR → ARM64 Backend
 ```
 
-The project is structured as a Cargo workspace:
-
-```text
-my-language/
-├── syntax/
-├── lexer/
-├── parser/
-├── evaluator/
-├── IR/
-├── Arm64Backend/
-└── compiler/
-```
-
-## What's Next
+What's Next
 
 The goal is to gradually turn the project into a more complete compiler. Planned work includes:
 
