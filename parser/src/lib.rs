@@ -17,6 +17,26 @@ impl Parser {
 
     fn parse_factor(&mut self) -> Result<Expr, CalculatorError> {
         match self.peek().cloned() {
+            Some(Token::LeftBrace) => self.parse_block(),
+            Some(Token::If) => {
+                self.position += 1;
+                let condition = self.parse_expression()?;
+                let then_branch = self.parse_block()?;
+                if self.peek() != Some(&Token::Else) {
+                    return Err(ParseError);
+                }
+                self.position += 1;
+                let else_branch = if self.peek() == Some(&Token::If) {
+                    self.parse_factor()?
+                } else {
+                    self.parse_block()?
+                };
+                Ok(Expr::If {
+                    condition: Box::new(condition),
+                    then_branch: Box::new(then_branch),
+                    else_branch: Box::new(else_branch),
+                })
+            }
             Some(Token::Number(value)) => {
                 self.position += 1;
                 Ok(Expr::Number(value))
@@ -70,6 +90,31 @@ impl Parser {
 
     fn parse_brack(&mut self) -> Result<Expr, CalculatorError> {
         self.parse_factor()
+    }
+
+    fn parse_block(&mut self) -> Result<Expr, CalculatorError> {
+        if self.peek() != Some(&Token::LeftBrace) {
+            return Err(ParseError);
+        }
+        self.position += 1;
+
+        let mut expressions = Vec::new();
+        loop {
+            if self.peek() == Some(&Token::RightBrace) {
+                if expressions.is_empty() {
+                    return Err(ParseError);
+                }
+                self.position += 1;
+                return Ok(Expr::Block(expressions));
+            }
+
+            expressions.push(self.parse_expression()?);
+            match self.peek() {
+                Some(Token::Semicolon) => self.position += 1,
+                Some(Token::RightBrace) => {}
+                _ => return Err(ParseError),
+            }
+        }
     }
 
     fn parse_term(&mut self) -> Result<Expr, CalculatorError> {
@@ -234,7 +279,7 @@ impl Parser {
         let mut functions = Vec::new();
         while self.peek() == Some(&Token::Fn) {
             let function = self.parse_function_definition()?;
-            if function.name == "main" {
+            if matches!(function.name.as_str(), "main" | "input" | "print") {
                 return Err(CalculatorError::ReservedFunctionName(function.name));
             }
             if functions
@@ -637,5 +682,81 @@ pub mod tests {
                 right: Box::new(Expr::Number(4.0))
             })
         );
+    }
+
+    #[test]
+    fn if_else_expression() {
+        let tokens = vec![
+            Token::If,
+            Token::Number(1.0),
+            Token::LeftBrace,
+            Token::Number(2.0),
+            Token::RightBrace,
+            Token::Else,
+            Token::LeftBrace,
+            Token::Number(3.0),
+            Token::RightBrace,
+        ];
+        let mut parser = Parser::new(tokens);
+
+        assert_eq!(
+            parser.parse(),
+            Ok(Expr::If {
+                condition: Box::new(Number(1.0)),
+                then_branch: Box::new(Expr::Block(vec![Number(2.0)])),
+                else_branch: Box::new(Expr::Block(vec![Number(3.0)])),
+            })
+        );
+    }
+
+    #[test]
+    fn block_with_assignment_and_result() {
+        let tokens = vec![
+            Token::LeftBrace,
+            Token::Identifier("x".into()),
+            Token::Equals,
+            Token::Number(4.0),
+            Token::Semicolon,
+            Token::Identifier("x".into()),
+            Token::Plus,
+            Token::Number(1.0),
+            Token::RightBrace,
+        ];
+        let mut parser = Parser::new(tokens);
+
+        assert_eq!(
+            parser.parse(),
+            Ok(Expr::Block(vec![
+                Expr::Assignment {
+                    name: "x".into(),
+                    value: Box::new(Number(4.0)),
+                },
+                Expr::Binary {
+                    left: Box::new(Expr::Variable("x".into())),
+                    operator: Operator::Addition,
+                    right: Box::new(Number(1.0)),
+                },
+            ]))
+        );
+    }
+
+    #[test]
+    fn empty_block_is_a_parse_error() {
+        let mut parser = Parser::new(vec![Token::LeftBrace, Token::RightBrace]);
+
+        assert_eq!(parser.parse(), Err(ParseError));
+    }
+
+    #[test]
+    fn if_expression_requires_else_branch() {
+        let mut parser = Parser::new(vec![
+            Token::If,
+            Token::Number(1.0),
+            Token::LeftBrace,
+            Token::Number(2.0),
+            Token::RightBrace,
+        ]);
+
+        assert_eq!(parser.parse(), Err(ParseError));
     }
 }

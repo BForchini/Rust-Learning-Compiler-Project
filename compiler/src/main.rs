@@ -1,6 +1,6 @@
 use std::{
     error::Error,
-    fs,
+    fs, io,
     path::PathBuf,
     process::{self, Command},
 };
@@ -12,6 +12,7 @@ fn main() {
     }
 }
 
+#[cfg(test)]
 fn verify_language_features() -> Result<(), Box<dyn Error>> {
     let tokens = lexer::lex("if x < 5 == 3")?;
     assert_eq!(
@@ -63,7 +64,8 @@ fn verify_language_features() -> Result<(), Box<dyn Error>> {
     assert_eq!(result, 1.0);
     assert!(assembly.contains("fcmp d"));
 
-    let (result, assembly) = compile_source("fn add(a, b) = a + b; fn twice(x) = add(x, x); twice(4)")?;
+    let (result, assembly) =
+        compile_source("fn add(a, b) = a + b; fn twice(x) = add(x, x); twice(4)")?;
     assert_eq!(result, 8.0);
     assert!(assembly.contains("bl _twice\n"));
     assert!(assembly.contains("bl _add\n"));
@@ -72,8 +74,53 @@ fn verify_language_features() -> Result<(), Box<dyn Error>> {
 }
 
 fn run() -> Result<(), Box<dyn Error>> {
-    verify_language_features()?;
+    match std::env::args_os().nth(1) {
+        Some(argument) if argument == "--repl" => run_repl(),
+        Some(path) => run_source_file(PathBuf::from(path)),
+        None => run_compiler_demo(),
+    }
+}
 
+fn run_source_file(path: PathBuf) -> Result<(), Box<dyn Error>> {
+    let source = fs::read_to_string(&path)?;
+    let tokens = lexer::lex(&source)?;
+    let mut parser = parser::Parser::new(tokens);
+    let program = parser.parse_program()?;
+
+    let stdin = io::stdin();
+    let stdout = io::stdout();
+    evaluator::Evaluator::new().evaluate_program_with_io(
+        &program,
+        &mut stdin.lock(),
+        &mut stdout.lock(),
+    )?;
+    Ok(())
+}
+
+fn run_repl() -> Result<(), Box<dyn Error>> {
+    use std::io::BufRead;
+
+    let stdin = io::stdin();
+    let mut evaluator = evaluator::Evaluator::new();
+    for line in stdin.lock().lines() {
+        let line = line?;
+        let source = line.trim();
+        if source.is_empty() {
+            continue;
+        }
+        if source == ":quit" {
+            break;
+        }
+
+        match evaluate_source(&mut evaluator, source) {
+            Ok(result) => println!("{result}"),
+            Err(error) => eprintln!("Error: {error}"),
+        }
+    }
+    Ok(())
+}
+
+fn run_compiler_demo() -> Result<(), Box<dyn Error>> {
     let source = "fn add(a, b) = a + b; fn twice(x) = add(x, x); twice(4)";
     let (result, assembly) = compile_source(source)?;
     let output_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../target/compiler-output");
@@ -103,6 +150,16 @@ fn run() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+fn evaluate_source(
+    evaluator: &mut evaluator::Evaluator,
+    source: &str,
+) -> Result<f64, syntax::CalculatorError> {
+    let tokens = lexer::lex(source)?;
+    let mut parser = parser::Parser::new(tokens);
+    let program: syntax::SourceProgram = parser.parse_program()?;
+    evaluator.evaluate_program(&program)
+}
+
 fn compile_source(source: &str) -> Result<(f64, String), Box<dyn Error>> {
     let tokens = lexer::lex(source)?;
     let mut parser = parser::Parser::new(tokens);
@@ -121,7 +178,8 @@ fn compile_source(source: &str) -> Result<(f64, String), Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{compile_source, verify_language_features};
+    use super::{compile_source, evaluate_source, verify_language_features};
+    use std::io::Cursor;
 
     #[test]
     fn compiler_main_wires_nested_function_pipeline() {
@@ -136,5 +194,61 @@ mod tests {
     #[test]
     fn compiler_verifies_keyword_and_comparison_syntax() {
         verify_language_features().unwrap();
+    }
+
+    #[test]
+    fn calculator_evaluates_input_and_keeps_variables_between_entries() {
+        let mut evaluator = evaluator::Evaluator::new();
+
+        assert_eq!(
+            evaluate_source(&mut evaluator, "total = 4 + 3 * 2"),
+            Ok(10.0)
+        );
+        assert_eq!(evaluate_source(&mut evaluator, "total - 1"), Ok(9.0));
+    }
+
+    #[test]
+    fn calculator_evaluates_function_definitions_and_calls() {
+        let mut evaluator = evaluator::Evaluator::new();
+
+        assert_eq!(
+            evaluate_source(&mut evaluator, "fn add(a, b) = a + b; add(4, 3)"),
+            Ok(7.0)
+        );
+    }
+
+    #[test]
+    fn in_language_calculator_reads_operands_and_selects_operations() {
+        let source = include_str!("../../examples/calculator.calc");
+        let tokens = lexer::lex(source).unwrap();
+        let mut parser = parser::Parser::new(tokens);
+        let program = parser.parse_program().unwrap();
+        let output_suffix =
+            "Left operand:\nRight operand:\nOperation: 1=add, 2=subtract, 3=multiply, 4=divide\n";
+
+        for (input, expected) in [
+            ("9\n3\n1\n", "12\n"),
+            ("9\n3\n2\n", "6\n"),
+            ("9\n3\n3\n", "27\n"),
+            ("9\n3\n4\n", "3\n"),
+            ("9\n0\n4\n", "Cannot divide by zero.\n"),
+            (
+                "9\n3\n5\n",
+                "Unknown operation; enter a code from 1 to 4.\n",
+            ),
+        ] {
+            let mut evaluator = evaluator::Evaluator::new();
+            let mut input = Cursor::new(input.as_bytes());
+            let mut output = Vec::new();
+
+            evaluator
+                .evaluate_program_with_io(&program, &mut input, &mut output)
+                .unwrap();
+
+            assert_eq!(
+                String::from_utf8(output).unwrap(),
+                format!("{output_suffix}{expected}")
+            );
+        }
     }
 }

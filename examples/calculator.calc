@@ -1,0 +1,26 @@
+fn calculate(left, right, operation) =
+    if operation == 1 { print(left + right) } else {
+        if operation == 2 { print(left - right) } else {
+            if operation == 3 { print(left * right) } else {
+                if operation == 4 {
+                    if right == 0 { print("Cannot divide by zero.") } else {
+                        print(left / right)
+                    }
+                } else {
+                    print("Unknown operation; enter a code from 1 to 4.")
+                }
+            }
+        }
+    };
+
+fn run() = {
+    print("Left operand:");
+    left = input();
+    print("Right operand:");
+    right = input();
+    print("Operation: 1=add, 2=subtract, 3=multiply, 4=divide");
+    operation = input();
+    calculate(left, right, operation)
+};
+
+run()

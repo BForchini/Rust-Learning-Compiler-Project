@@ -97,10 +97,7 @@ fn tokenize(trimmed: &str) -> Result<Vec<Token>, CalculatorError> {
     Ok(tokens)
 }
 
-fn parse_operator(
-    c: char,
-    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
-) -> Option<Token> {
+fn parse_operator(c: char, chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Option<Token> {
     match c {
         '=' => {
             if matches!(chars.peek(), Some('=')) {
@@ -120,6 +117,8 @@ fn parse_operator(
         '/' => Some(Token::Slash),
         '(' => Some(Token::LeftParen),
         ')' => Some(Token::RightParen),
+        '{' => Some(Token::LeftBrace),
+        '}' => Some(Token::RightBrace),
         _ => None,
     }
 }
@@ -141,8 +140,8 @@ pub mod tests {
 
     use super::*;
     use syntax::Token::{
-        Comma, Equals, EqualsEquals, Fn, Identifier, If, LeftParen, LessThan, Minus, Number,
-        Plus, RightParen, Semicolon, Star,
+        Comma, Else, Equals, EqualsEquals, Fn, Identifier, If, LeftBrace, LeftParen, LessThan,
+        Minus, Number, Plus, RightBrace, RightParen, Semicolon, Star,
     };
 
     #[test]
@@ -279,7 +278,14 @@ pub mod tests {
 
         assert_eq!(
             tokens,
-            vec![If, Identifier("x".into()), LessThan, Number(5.0), EqualsEquals, Number(3.0)]
+            vec![
+                If,
+                Identifier("x".into()),
+                LessThan,
+                Number(5.0),
+                EqualsEquals,
+                Number(3.0)
+            ]
         );
     }
 
@@ -292,5 +298,29 @@ pub mod tests {
         let tokens = result.unwrap();
 
         assert_eq!(tokens, vec![Token::String("hello".into())]);
+    }
+
+    #[test]
+    fn control_flow_and_block_delimiters() {
+        assert_eq!(
+            lex("if 1 { print(2) } else { print(3) }"),
+            Ok(vec![
+                If,
+                Number(1.0),
+                LeftBrace,
+                Identifier("print".into()),
+                LeftParen,
+                Number(2.0),
+                RightParen,
+                RightBrace,
+                Else,
+                LeftBrace,
+                Identifier("print".into()),
+                LeftParen,
+                Number(3.0),
+                RightParen,
+                RightBrace,
+            ])
+        );
     }
 }

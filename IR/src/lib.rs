@@ -50,6 +50,7 @@ impl Program {
                 Ok(destination)
             }
             Expr::String(_) => Err(CalculatorError::InputInvalid),
+            Expr::Block(_) | Expr::If { .. } => Err(CalculatorError::IrError),
             Expr::Variable(name) => self
                 .variables
                 .get(name)
@@ -416,5 +417,25 @@ mod test {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn if_expression_is_not_supported_by_ir() {
+        let expr = Expr::If {
+            condition: Box::new(Number(1.0)),
+            then_branch: Box::new(Number(2.0)),
+            else_branch: Box::new(Number(3.0)),
+        };
+        let mut program = Program::new();
+
+        assert_eq!(program.generate_ir(&expr), Err(CalculatorError::IrError));
+    }
+
+    #[test]
+    fn block_is_not_supported_by_ir() {
+        let expr = Expr::Block(vec![Number(2.0)]);
+        let mut program = Program::new();
+
+        assert_eq!(program.generate_ir(&expr), Err(CalculatorError::IrError));
     }
 }

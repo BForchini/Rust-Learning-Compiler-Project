@@ -10,6 +10,8 @@ pub enum Token {
     Else,
     For,
     While,
+    LeftBrace,    // {
+    RightBrace,   // }
     Equals,       // =
     EqualsEquals, // ==
     GreaterThan,  // >
@@ -48,8 +50,12 @@ pub enum CalculatorError {
     },
     #[error("Function defined more than once: {0}")]
     DuplicateFunction(String),
-    #[error("Function name is reserved for the program entry point: {0}")]
+    #[error("Function name is reserved: {0}")]
     ReservedFunctionName(String),
+    #[error("Input/output error: {0}")]
+    InputOutput(String),
+    #[error("Input is not a valid number: {0}")]
+    InvalidNumberInput(String),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -65,6 +71,12 @@ pub enum Expr {
     FunctionCall {
         name: String,
         arguments: Vec<Expr>,
+    },
+    Block(Vec<Expr>),
+    If {
+        condition: Box<Expr>,
+        then_branch: Box<Expr>,
+        else_branch: Box<Expr>,
     },
     Binary {
         left: Box<Expr>,
@@ -149,4 +161,32 @@ pub enum Instructions {
         arguments: Vec<Temp>,
         destination: Temp,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CalculatorError, Expr};
+
+    #[test]
+    fn block_and_if_expressions_are_cloneable_ast_nodes() {
+        let expression = Expr::If {
+            condition: Box::new(Expr::Number(1.0)),
+            then_branch: Box::new(Expr::Block(vec![Expr::Number(2.0)])),
+            else_branch: Box::new(Expr::Block(vec![Expr::Number(3.0)])),
+        };
+
+        assert_eq!(expression.clone(), expression);
+    }
+
+    #[test]
+    fn input_and_output_errors_have_user_facing_messages() {
+        assert_eq!(
+            CalculatorError::InvalidNumberInput("nope".into()).to_string(),
+            "Input is not a valid number: nope"
+        );
+        assert_eq!(
+            CalculatorError::InputOutput("closed".into()).to_string(),
+            "Input/output error: closed"
+        );
+    }
 }
