@@ -12,6 +12,8 @@ The language currently supports:
 * `+`, `-`, `*`, `/`
 * Variable assignment and references
 * Expression-bodied functions, parameters, and nested calls
+* `if` / `else` expressions and brace-delimited blocks
+* Numeric console input with `input()` and output with `print(value)`
 * Operator precedence
 * Recursive-descent parsing
 * Abstract syntax trees
@@ -32,7 +34,9 @@ Functions are defined with `fn`, an optional comma-separated parameter list, and
 fn add(a, b) = a + b; fn twice(x) = add(x, x); twice(4)
 ```
 
-Run `cargo run -p compiler` to exercise lexing, parsing, evaluation, IR generation, and ARM64 code generation from the same program. The compiler invokes `clang` to assemble and link `target/compiler-output/program.s` into `target/compiler-output/program`; `clang` must be installed. Native function calls currently support up to eight floating-point arguments.
+Run `cargo run -p compiler -- examples/calculator.calc` to run the calculator program written in this language. Follow its prompts and enter three numbers, each on its own line: the left operand, right operand, and operation code (`1` add, `2` subtract, `3` multiply, `4` divide). The program prints the result.
+
+For example, piping `9`, `3`, and `4` into the program displays the prompts and prints `3`. An operation code outside `1`-`4` prints an error message instead of silently selecting an operation.
 
 The current pipeline is:
 
@@ -44,7 +48,7 @@ What's Next
 
 The goal is to gradually turn the project into a more complete compiler. Planned work includes:
 
-* Control flow
+* Conditional and loop expressions
 * A custom intermediate representation
 * Bytecode and a virtual machine
 * Type checking
