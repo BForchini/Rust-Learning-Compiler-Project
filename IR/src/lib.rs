@@ -9,6 +9,7 @@ pub struct Program {
     pub instructions: Vec<Instructions>,
     pub functions: Vec<FunctionIr>,
     next_temp: usize,
+    next_label: usize,
     variables: HashMap<String, Temp>,
     function_signatures: HashMap<String, usize>,
 }
@@ -27,6 +28,7 @@ impl Program {
             instructions: Vec::new(),
             functions: Vec::new(),
             next_temp: 0,
+            next_label: 0,
             variables: HashMap::new(),
             function_signatures: HashMap::new(),
         }
@@ -37,6 +39,12 @@ impl Program {
         let temp = self.next_temp;
         self.next_temp += 1;
         temp
+    }
+
+    fn new_label(&mut self) -> usize {
+        let label = self.next_label;
+        self.next_label += 1;
+        label
     }
 
     pub fn generate_ir(&mut self, expr: &Expr) -> Result<Temp, CalculatorError> {
@@ -50,7 +58,45 @@ impl Program {
                 Ok(destination)
             }
             Expr::String(_) => Err(CalculatorError::InputInvalid),
-            Expr::Block(_) | Expr::If { .. } => Err(CalculatorError::IrError),
+            Expr::Block(expressions) => {
+                let mut result = None;
+                for expression in expressions {
+                    result = Some(self.generate_ir(expression)?);
+                }
+                result.ok_or(CalculatorError::IrError)
+            }
+            Expr::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let condition = self.generate_ir(condition)?;
+                let else_label = self.new_label();
+                let end_label = self.new_label();
+                let destination = self.new_temp();
+
+                self.instructions.push(Instructions::JumpIfZero {
+                    condition,
+                    label: else_label,
+                });
+                let then_result = self.generate_ir(then_branch)?;
+                self.instructions.push(Instructions::Copy {
+                    source: then_result,
+                    destination,
+                });
+                self.instructions
+                    .push(Instructions::Jump { label: end_label });
+                self.instructions
+                    .push(Instructions::Label { label: else_label });
+                let else_result = self.generate_ir(else_branch)?;
+                self.instructions.push(Instructions::Copy {
+                    source: else_result,
+                    destination,
+                });
+                self.instructions
+                    .push(Instructions::Label { label: end_label });
+                Ok(destination)
+            }
             Expr::Variable(name) => self
                 .variables
                 .get(name)
@@ -62,6 +108,42 @@ impl Program {
                 Ok(value_temp)
             }
             Expr::FunctionCall { name, arguments } => {
+                if name == "input" {
+                    if !arguments.is_empty() {
+                        return Err(CalculatorError::FunctionArity {
+                            name: name.clone(),
+                            expected: 0,
+                            actual: arguments.len(),
+                        });
+                    }
+                    let destination = self.new_temp();
+                    self.instructions
+                        .push(Instructions::InputNumber { destination });
+                    return Ok(destination);
+                }
+                if name == "print" {
+                    if arguments.len() != 1 {
+                        return Err(CalculatorError::FunctionArity {
+                            name: name.clone(),
+                            expected: 1,
+                            actual: arguments.len(),
+                        });
+                    }
+                    if let Expr::String(value) = &arguments[0] {
+                        self.instructions.push(Instructions::PrintString {
+                            value: value.clone(),
+                        });
+                        let destination = self.new_temp();
+                        self.instructions.push(Instructions::LoadConstant {
+                            value: 0.0,
+                            destination,
+                        });
+                        return Ok(destination);
+                    }
+                    let value = self.generate_ir(&arguments[0])?;
+                    self.instructions.push(Instructions::PrintNumber { value });
+                    return Ok(value);
+                }
                 let expected = self
                     .function_signatures
                     .get(name)
@@ -168,9 +250,10 @@ impl Program {
         self.variables.clear();
         self.function_signatures.clear();
         self.next_temp = 0;
+        self.next_label = 0;
 
         for function in &source.functions {
-            if function.name == "main" {
+            if matches!(function.name.as_str(), "main" | "input" | "print") {
                 return Err(CalculatorError::ReservedFunctionName(function.name.clone()));
             }
             if self
@@ -420,7 +503,7 @@ mod test {
     }
 
     #[test]
-    fn if_expression_is_not_supported_by_ir() {
+    fn if_expression_generates_branching_ir() {
         let expr = Expr::If {
             condition: Box::new(Number(1.0)),
             then_branch: Box::new(Number(2.0)),
@@ -428,14 +511,46 @@ mod test {
         };
         let mut program = Program::new();
 
-        assert_eq!(program.generate_ir(&expr), Err(CalculatorError::IrError));
+        assert_eq!(program.generate_ir(&expr), Ok(1));
+        assert_eq!(
+            program.instructions,
+            vec![
+                Instructions::LoadConstant {
+                    value: 1.0,
+                    destination: 0,
+                },
+                Instructions::JumpIfZero {
+                    condition: 0,
+                    label: 0,
+                },
+                Instructions::LoadConstant {
+                    value: 2.0,
+                    destination: 2,
+                },
+                Instructions::Copy {
+                    source: 2,
+                    destination: 1,
+                },
+                Instructions::Jump { label: 1 },
+                Instructions::Label { label: 0 },
+                Instructions::LoadConstant {
+                    value: 3.0,
+                    destination: 3,
+                },
+                Instructions::Copy {
+                    source: 3,
+                    destination: 1,
+                },
+                Instructions::Label { label: 1 },
+            ]
+        );
     }
 
     #[test]
-    fn block_is_not_supported_by_ir() {
-        let expr = Expr::Block(vec![Number(2.0)]);
+    fn block_returns_its_last_expression_temporary() {
+        let expr = Expr::Block(vec![Number(2.0), Number(4.0)]);
         let mut program = Program::new();
 
-        assert_eq!(program.generate_ir(&expr), Err(CalculatorError::IrError));
+        assert_eq!(program.generate_ir(&expr), Ok(1));
     }
 }

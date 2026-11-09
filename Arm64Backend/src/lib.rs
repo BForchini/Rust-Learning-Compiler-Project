@@ -41,6 +41,7 @@ pub struct Arm64Backend {
     function_asm: String,
     literal_pool: String,
     current_function: Option<String>,
+    next_string: usize,
 }
 
 impl Arm64Backend {
@@ -50,6 +51,7 @@ impl Arm64Backend {
             function_asm: String::new(),
             literal_pool: String::new(),
             current_function: None,
+            next_string: 0,
         }
     }
 
@@ -58,6 +60,7 @@ impl Arm64Backend {
         self.function_asm.clear();
         self.literal_pool.clear();
         self.current_function = None;
+        self.next_string = 0;
 
         for (instruction_index, instruction) in program.instructions.iter().enumerate() {
             self.emit_instruction(instruction_index, instruction)?;
@@ -185,6 +188,16 @@ impl Arm64Backend {
                 .copied()
                 .chain(std::iter::once(*destination))
                 .collect(),
+            Instructions::InputNumber { destination } => vec![*destination],
+            Instructions::PrintNumber { value } => vec![*value],
+            Instructions::PrintString { .. }
+            | Instructions::Jump { .. }
+            | Instructions::Label { .. } => Vec::new(),
+            Instructions::Copy {
+                source,
+                destination,
+            } => vec![*source, *destination],
+            Instructions::JumpIfZero { condition, .. } => vec![*condition],
         };
 
         for temp in temps {
@@ -251,6 +264,33 @@ impl Arm64Backend {
                 arguments,
                 destination,
             } => self.emit_call(name, arguments, *destination)?,
+            Instructions::InputNumber { destination } => {
+                self.emit_runtime_call("_compiler_input_number", None, Some(*destination));
+            }
+            Instructions::PrintNumber { value } => {
+                self.emit_runtime_call("_compiler_print_number", Some(*value), None);
+            }
+            Instructions::PrintString { value } => self.emit_print_string(value),
+            Instructions::Copy {
+                source,
+                destination,
+            } => self
+                .asm
+                .push_str(&format!("fmov d{destination}, d{source}\n")),
+            Instructions::JumpIfZero { condition, label } => {
+                self.asm.push_str(&format!(
+                    "fcmp d{condition}, #0.0\nb.eq {}\n",
+                    self.label_name(*label)
+                ));
+            }
+            Instructions::Jump { label } => {
+                self.asm
+                    .push_str(&format!("b {}\n", self.label_name(*label)));
+            }
+            Instructions::Label { label } => {
+                self.asm
+                    .push_str(&format!("{}:\n", self.label_name(*label)));
+            }
         }
 
         Ok(())
@@ -303,6 +343,63 @@ impl Arm64Backend {
         Ok(())
     }
 
+    fn emit_runtime_call(&mut self, symbol: &str, argument: Option<Temp>, result: Option<Temp>) {
+        self.asm.push_str("sub sp, sp, #272\n");
+        for register in 0..32 {
+            self.asm
+                .push_str(&format!("str d{register}, [sp, #{}]\n", register * 8));
+        }
+        if let Some(argument) = argument {
+            self.asm
+                .push_str(&format!("ldr d0, [sp, #{}]\n", argument * 8));
+        }
+        self.asm.push_str(&format!("bl {symbol}\n"));
+        if result.is_some() {
+            self.asm.push_str("str d0, [sp, #256]\n");
+        }
+        for register in 0..32 {
+            self.asm
+                .push_str(&format!("ldr d{register}, [sp, #{}]\n", register * 8));
+        }
+        if let Some(result) = result {
+            self.asm.push_str(&format!("ldr d{result}, [sp, #256]\n"));
+        }
+        self.asm.push_str("add sp, sp, #272\n");
+    }
+
+    fn emit_print_string(&mut self, value: &str) {
+        let label = format!("Lstring{}", self.next_string);
+        self.next_string += 1;
+        self.literal_pool
+            .push_str(&format!(".p2align 2\n{label}:\n.byte "));
+        for byte in value.as_bytes() {
+            self.literal_pool.push_str(&format!("{byte},"));
+        }
+        self.literal_pool.push_str("0\n");
+
+        self.asm.push_str("sub sp, sp, #272\n");
+        for register in 0..32 {
+            self.asm
+                .push_str(&format!("str d{register}, [sp, #{}]\n", register * 8));
+        }
+        self.asm.push_str(&format!(
+            "adrp x0, {label}@PAGE\nadd x0, x0, {label}@PAGEOFF\nbl _compiler_print_string\n"
+        ));
+        for register in 0..32 {
+            self.asm
+                .push_str(&format!("ldr d{register}, [sp, #{}]\n", register * 8));
+        }
+        self.asm.push_str("add sp, sp, #272\n");
+    }
+
+    fn label_name(&self, label: usize) -> String {
+        format!(
+            "L{}_{}",
+            self.current_function.as_deref().unwrap_or("main"),
+            label
+        )
+    }
+
     fn emit_add(&mut self, left: Temp, right: Temp, destination: Temp) {
         self.asm
             .push_str(&format!("fadd d{destination}, d{left}, d{right}\n"));
@@ -324,12 +421,9 @@ impl Arm64Backend {
     }
 
     fn emit_compare(&mut self, left: Temp, right: Temp, destination: Temp, condition: &str) {
-        self.asm
-            .push_str(&format!("fcmp d{left}, d{right}\n"));
-        self.asm
-            .push_str(&format!("cset w16, {condition}\n"));
-        self.asm
-            .push_str(&format!("scvtf d{destination}, w16\n"));
+        self.asm.push_str(&format!("fcmp d{left}, d{right}\n"));
+        self.asm.push_str(&format!("cset w16, {condition}\n"));
+        self.asm.push_str(&format!("scvtf d{destination}, w16\n"));
     }
 }
 

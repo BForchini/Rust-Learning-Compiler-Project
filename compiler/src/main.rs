@@ -1,7 +1,7 @@
 use std::{
     error::Error,
     fs, io,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{self, Command},
 };
 
@@ -82,18 +82,26 @@ fn run() -> Result<(), Box<dyn Error>> {
 }
 
 fn run_source_file(path: PathBuf) -> Result<(), Box<dyn Error>> {
-    let source = fs::read_to_string(&path)?;
+    let source = fs::read_to_string(&path).map_err(|error| {
+        format!(
+            "could not read source file {}: {error}; pass a path relative to the current directory",
+            path.display()
+        )
+    })?;
     let tokens = lexer::lex(&source)?;
     let mut parser = parser::Parser::new(tokens);
     let program = parser.parse_program()?;
 
-    let stdin = io::stdin();
-    let stdout = io::stdout();
-    evaluator::Evaluator::new().evaluate_program_with_io(
-        &program,
-        &mut stdin.lock(),
-        &mut stdout.lock(),
-    )?;
+    let assembly = generate_assembly(&program)?;
+    let output_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../target/compiler-output");
+    let output_base = output_dir.join(
+        path.file_stem()
+            .ok_or("source file path has no file name")?,
+    );
+    let assembly_path = build_executable(&assembly, &output_base)?;
+    println!("Generated assembly: {}", assembly_path.display());
+    println!("Compiled executable: {}", output_base.display());
+    run_executable(&output_base)?;
     Ok(())
 }
 
@@ -121,20 +129,41 @@ fn run_repl() -> Result<(), Box<dyn Error>> {
 }
 
 fn run_compiler_demo() -> Result<(), Box<dyn Error>> {
-    let source = "fn add(a, b) = a + b; fn twice(x) = add(x, x); twice(4)";
+    let source = "fn add(a, b) = a + b; fn double(x) = add(x, x); double(10)";
     let (result, assembly) = compile_source(source)?;
     let output_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../target/compiler-output");
     fs::create_dir_all(&output_dir)?;
-
-    let assembly_path = output_dir.join("program.s");
     let executable_path = output_dir.join("program");
-    fs::write(&assembly_path, assembly.as_bytes())?;
+    let assembly_path = build_executable(&assembly, &executable_path)?;
+    run_executable(&executable_path)?;
 
+    println!("Result: {result}");
+    println!("Generated assembly: {}", assembly_path.display());
+    println!("Compiled executable: {}", executable_path.display());
+    Ok(())
+}
+
+fn build_executable(assembly: &str, executable_path: &Path) -> Result<PathBuf, Box<dyn Error>> {
+    let output_dir = executable_path
+        .parent()
+        .ok_or("executable path has no parent directory")?;
+    fs::create_dir_all(output_dir)?;
+
+    let assembly_path = executable_path.with_extension("s");
+    fs::write(&assembly_path, assembly)?;
+    let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("runtime.c");
     let clang_output = Command::new("clang")
         .arg(&assembly_path)
+        .arg(&runtime_path)
         .arg("-o")
-        .arg(&executable_path)
-        .output()?;
+        .arg(executable_path)
+        .output()
+        .map_err(|error| {
+            format!(
+                "could not start clang while compiling {}: {error}; install Xcode Command Line Tools or make clang available on PATH",
+                assembly_path.display()
+            )
+        })?;
     if !clang_output.status.success() {
         return Err(format!(
             "clang failed to compile {}: {}",
@@ -144,9 +173,19 @@ fn run_compiler_demo() -> Result<(), Box<dyn Error>> {
         .into());
     }
 
-    println!("Result: {result}");
-    println!("Generated assembly: {}", assembly_path.display());
-    println!("Compiled executable: {}", executable_path.display());
+    Ok(assembly_path)
+}
+
+fn run_executable(executable_path: &Path) -> Result<(), Box<dyn Error>> {
+    let status = Command::new(executable_path).status().map_err(|error| {
+        format!(
+            "could not start compiled executable {}: {error}",
+            executable_path.display()
+        )
+    })?;
+    if !status.success() {
+        return Err(format!("program exited with status {status}").into());
+    }
     Ok(())
 }
 
@@ -167,18 +206,22 @@ fn compile_source(source: &str) -> Result<(f64, String), Box<dyn Error>> {
 
     let result = evaluator::Evaluator::new().evaluate_program(&program)?;
 
-    let mut ir = ir::Program::new();
-    let result_temp = ir.generate_program_ir(&program)?;
-    let mut backend = Arm64Backend::Arm64Backend::new();
-    backend.generate(&ir)?;
-    let assembly = backend.create_asm(result_temp);
+    let assembly = generate_assembly(&program)?;
 
     Ok((result, assembly))
 }
 
+fn generate_assembly(program: &syntax::SourceProgram) -> Result<String, Box<dyn Error>> {
+    let mut ir = ir::Program::new();
+    let result_temp = ir.generate_program_ir(program)?;
+    let mut backend = Arm64Backend::Arm64Backend::new();
+    backend.generate(&ir)?;
+    Ok(backend.create_asm(result_temp))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{compile_source, evaluate_source, verify_language_features};
+    use super::{compile_source, evaluate_source, generate_assembly, verify_language_features};
     use std::io::Cursor;
 
     #[test]
@@ -250,5 +293,19 @@ mod tests {
                 format!("{output_suffix}{expected}")
             );
         }
+    }
+
+    #[test]
+    fn native_calculator_codegen_includes_io_and_conditional_branches() {
+        let tokens = lexer::lex(include_str!("../../examples/calculator.calc")).unwrap();
+        let mut parser = parser::Parser::new(tokens);
+        let program = parser.parse_program().unwrap();
+        let assembly = generate_assembly(&program).unwrap();
+
+        assert!(assembly.contains("bl _compiler_input_number"));
+        assert!(assembly.contains("bl _compiler_print_number"));
+        assert!(assembly.contains("bl _compiler_print_string"));
+        assert!(assembly.contains("b.eq Lcalculate_"));
+        assert!(assembly.contains("Lstring0:"));
     }
 }

@@ -161,6 +161,29 @@ pub enum Instructions {
         arguments: Vec<Temp>,
         destination: Temp,
     },
+    InputNumber {
+        destination: Temp,
+    },
+    PrintNumber {
+        value: Temp,
+    },
+    PrintString {
+        value: String,
+    },
+    Copy {
+        source: Temp,
+        destination: Temp,
+    },
+    JumpIfZero {
+        condition: Temp,
+        label: usize,
+    },
+    Jump {
+        label: usize,
+    },
+    Label {
+        label: usize,
+    },
 }
 
 #[cfg(test)]
